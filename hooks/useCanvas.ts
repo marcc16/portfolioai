@@ -43,4 +43,8 @@ export const useCanvas = (draw: DrawFunction) => {
   }, [draw]);
 
   return canvasRef;
+<<<<<<< HEAD
 };
+=======
+};
+>>>>>>> d5dd92665c428a8b7d36ba2c73a1cfce0fd02f9f
