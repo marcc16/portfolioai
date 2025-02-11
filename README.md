@@ -10,7 +10,7 @@
   </p>
 
   <p align="center">
-    <a href="https://portify-demo.vercel.app" target="_blank">
+    <a href="https://portify-omega.vercel.app/" target="_blank">
       <img src="https://img.shields.io/badge/LIVE_DEMO-VISIT-9cf?style=for-the-badge" alt="Live Demo" />
     </a>
   </p>
