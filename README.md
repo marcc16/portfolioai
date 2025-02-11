@@ -22,12 +22,6 @@
     <img src="https://img.shields.io/badge/framer%20motion-0055FF?style=for-the-badge&logo=framer&logoColor=white" alt="framer-motion" />
     <img src="https://img.shields.io/badge/typescript-3178C6?style=for-the-badge&logo=typescript&logoColor=white" alt="typescript" />
   </div>
-
-  <br />
-
-  <p align="center">
-    <img src="https://i.imgur.com/YOUR-SCREENSHOT.gif" alt="Demo GIF" width="70%" />
-  </p>
 </div>
 
 <br />
