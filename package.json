@@ -9,12 +9,13 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@foobar404/wave": "^2.0.5",
     "@heroicons/react": "^2.2.0",
     "framer-motion": "^12.0.11",
     "next": "15.1.6",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "react-icons": "^5.4.0"
+    "react-icons": "^5.5.0"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
