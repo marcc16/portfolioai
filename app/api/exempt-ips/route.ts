@@ -33,10 +33,10 @@ const ADMIN_PASSWORD = 'tu-contraseña-secreta';
 async function getExemptIPs(): Promise<string[]> {
   try {
     const ips = await redis.get<string[]>(EXEMPT_IPS_KEY);
-    return ips || ['127.0.0.1'];
+    return ips || ['127.0.0.1', '81.202.15.161'];
   } catch (error) {
     console.error('Error getting exempt IPs:', error);
-    return ['127.0.0.1'];
+    return ['127.0.0.1', '81.202.15.161'];
   }
 }
 
