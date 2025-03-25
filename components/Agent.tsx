@@ -1,15 +1,12 @@
 'use client';
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { vapi } from "@/lib/vapi.sdk";
-import { interviewer } from "@/constants";
 
 enum CallStatus {
   INACTIVE = "INACTIVE",
   CONNECTING = "CONNECTING",
   ACTIVE = "ACTIVE",
-  FINISHED = "FINISHED",
-  IDLE = "IDLE",
-  ERROR = "ERROR"
+  FINISHED = "FINISHED"
 }
 
 interface Message {
@@ -17,6 +14,8 @@ interface Message {
   role: "user" | "system" | "assistant";
   transcript?: string;
   transcriptType?: string;
+  action?: string;
+  errorMsg?: string;
 }
 
 interface SavedMessage {
@@ -24,11 +23,11 @@ interface SavedMessage {
   content: string;
 }
 
-// Lista de errores esperados que no deben mostrarse en la consola
-const EXPECTED_ERRORS = [
+// Lista de errores esperados que indican fin de llamada
+const CALL_END_ERRORS = [
   "Meeting has ended",
   "Meeting ended in error: Meeting has ended",
-  "browser- or platform-unsupported input processor(s): audio"
+  "Exiting meeting because room was deleted"
 ];
 
 // Hook personalizado para la gestión del agente de voz
@@ -37,127 +36,123 @@ export function useAgent() {
   const [messages, setMessages] = useState<SavedMessage[]>([]);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [lastMessage, setLastMessage] = useState<string>("");
-  const [error, setError] = useState<string | null>(null);
 
-  // Función auxiliar para determinar si un error es esperado y no debe mostrarse
-  const isExpectedError = useCallback((errorMessage: string) => {
-    return EXPECTED_ERRORS.some(expected => errorMessage.includes(expected));
-  }, []);
+  // Función auxiliar para verificar si un error indica fin de llamada
+  const isCallEndError = (error: any): boolean => {
+    const errorMsg = error?.errorMsg || error?.message || error?.toString();
+    return CALL_END_ERRORS.some(msg => errorMsg.includes(msg));
+  };
 
   // Configurar los listeners de Vapi
   useEffect(() => {
-    if (!vapi) return;
-
-    const handleCallStart = () => {
-      setCallStatus(CallStatus.ACTIVE);
-      setMessages([]);
-      setError(null);
-    };
-
-    const handleCallEnd = () => {
-      setCallStatus(CallStatus.IDLE);
-      setMessages([]);
-      setError(null);
-    };
-
-    const handleMessage = (message: Message) => {
-      if (message.type === "transcript" && message.transcriptType === "final") {
-        const savedMessage: SavedMessage = {
-          role: message.role,
-          content: message.transcript || ""
-        };
-        setMessages(prev => [...prev, savedMessage]);
-        setLastMessage(savedMessage.content);
-      }
-    };
-
-    const handleSpeechStart = () => setIsSpeaking(true);
-    const handleSpeechEnd = () => setIsSpeaking(false);
-
-    const handleError = (error: Error) => {
-      console.error('Vapi error:', error);
-      if (!isExpectedError(error.message)) {
-        setError(error.message);
-      }
-    };
-
-    // Guardar la referencia a vapi para la limpieza
     const vapiInstance = vapi;
+    if (!vapiInstance) return;
 
-    vapiInstance.on("call-start", handleCallStart);
-    vapiInstance.on("call-end", handleCallEnd);
-    vapiInstance.on("message", handleMessage);
-    vapiInstance.on("speech-start", handleSpeechStart);
-    vapiInstance.on("speech-end", handleSpeechEnd);
-    vapiInstance.on("error", handleError);
+    const onCallStart = () => {
+      console.log('🟢 [VAPI] Llamada iniciada');
+      setCallStatus(CallStatus.ACTIVE);
+    };
+
+    const onCallEnd = () => {
+      console.log('🔴 [VAPI] Llamada finalizada');
+      console.log('📝 [VAPI] Mensajes acumulados:', messages);
+      setCallStatus(CallStatus.FINISHED);
+    };
+
+    const onMessage = (message: Message) => {
+      if (message.type === "transcript" && message.transcriptType === "final") {
+        console.log(`💬 [VAPI] Nuevo mensaje (${message.role}):`, message.transcript);
+        const newMessage = { role: message.role, content: message.transcript || "" };
+        setMessages(prev => [...prev, newMessage]);
+      }
+    };
+
+    const onSpeechStart = () => {
+      console.log("🎤 [VAPI] Inicio de habla");
+      setIsSpeaking(true);
+    };
+
+    const onSpeechEnd = () => {
+      console.log("🎤 [VAPI] Fin de habla");
+      setIsSpeaking(false);
+    };
+
+    const onError = (error: Error | any) => {
+      console.error('❌ [VAPI] Error:', error);
+      
+      // Si el error indica fin de llamada, actualizamos el estado
+      if (isCallEndError(error)) {
+        console.log('🔄 [VAPI] Error de fin de llamada detectado, actualizando estado');
+        setCallStatus(CallStatus.FINISHED);
+        setIsSpeaking(false);
+      }
+    };
+
+    console.log('🔄 [VAPI] Configurando listeners');
+    
+    // Configurar los listeners
+    vapiInstance.on("call-start", onCallStart);
+    vapiInstance.on("call-end", onCallEnd);
+    vapiInstance.on("message", onMessage);
+    vapiInstance.on("speech-start", onSpeechStart);
+    vapiInstance.on("speech-end", onSpeechEnd);
+    vapiInstance.on("error", onError);
 
     return () => {
-      if (vapiInstance) {
-        vapiInstance.off("call-start", handleCallStart);
-        vapiInstance.off("call-end", handleCallEnd);
-        vapiInstance.off("message", handleMessage);
-        vapiInstance.off("speech-start", handleSpeechStart);
-        vapiInstance.off("speech-end", handleSpeechEnd);
-        vapiInstance.off("error", handleError);
-      }
+      console.log('🧹 [VAPI] Limpiando listeners');
+      vapiInstance.off("call-start", onCallStart);
+      vapiInstance.off("call-end", onCallEnd);
+      vapiInstance.off("message", onMessage);
+      vapiInstance.off("speech-start", onSpeechStart);
+      vapiInstance.off("speech-end", onSpeechEnd);
+      vapiInstance.off("error", onError);
     };
-  }, [isExpectedError]);
+  }, [messages]); // Añadimos messages como dependencia para poder acceder a su valor actualizado en onCallEnd
 
   // Actualizar el último mensaje cuando cambia la lista de mensajes
   useEffect(() => {
     if (messages.length > 0) {
-      setLastMessage(messages[messages.length - 1].content);
+      const lastMsg = messages[messages.length - 1].content;
+      console.log('📜 [VAPI] Último mensaje actualizado:', lastMsg);
+      setLastMessage(lastMsg);
     }
   }, [messages]);
 
   // Función para iniciar la llamada
   const handleCall = async () => {
     if (!vapi) {
-      console.error("No se puede iniciar la llamada: Vapi no está inicializado");
-      setError("Voice assistant not initialized");
+      console.error("❌ [VAPI] Voice assistant not initialized");
       return;
     }
 
     try {
-      console.log("Iniciando llamada...");
+      console.log('🔄 [VAPI] Iniciando llamada...');
       setCallStatus(CallStatus.CONNECTING);
-      setError(null);
-      
-      if (!process.env.NEXT_PUBLIC_VAPI_PUBLIC_KEY) {
-        throw new Error("Voice assistant token not configured");
+
+      if (!process.env.NEXT_PUBLIC_VAPI_WORKFLOW_ID) {
+        throw new Error("Workflow ID not configured");
       }
 
-      console.log("Configuración del asistente:", interviewer);
-      await vapi.start(interviewer);
-      console.log("Llamada iniciada exitosamente");
-    } catch (err) {
-      if (err instanceof Error && !isExpectedError(err.message)) {
-        console.error("Error iniciando llamada:", err.message);
-        setError(err.message);
-        setCallStatus(CallStatus.ERROR);
-      }
+      console.log('🔗 [VAPI] Usando workflow ID:', process.env.NEXT_PUBLIC_VAPI_WORKFLOW_ID);
+      await vapi.start(process.env.NEXT_PUBLIC_VAPI_WORKFLOW_ID);
+      console.log('✅ [VAPI] Llamada iniciada exitosamente');
+    } catch (error) {
+      console.error("❌ [VAPI] Error iniciando llamada:", error);
+      setCallStatus(CallStatus.INACTIVE);
     }
   };
 
   // Función para finalizar la llamada
   const handleDisconnect = () => {
     if (!vapi) {
-      console.error("No se puede finalizar la llamada: Vapi no está inicializado");
-      setError("Voice assistant not initialized");
+      console.error("❌ [VAPI] Voice assistant not initialized");
       return;
     }
 
-    try {
-      console.log("Finalizando llamada...");
-      setCallStatus(CallStatus.FINISHED);
-      vapi.stop();
-      console.log("Llamada finalizada exitosamente");
-    } catch (err) {
-      if (err instanceof Error && !isExpectedError(err.message)) {
-        console.error("Error finalizando llamada:", err.message);
-        setError(err.message);
-      }
-    }
+    console.log('🔄 [VAPI] Finalizando llamada...');
+    setCallStatus(CallStatus.FINISHED);
+    vapi.stop();
+    console.log('✅ [VAPI] Llamada finalizada manualmente');
   };
 
   // Devolver las propiedades y métodos necesarios
@@ -165,7 +160,7 @@ export function useAgent() {
     callStatus,
     isSpeaking,
     lastMessage,
-    error,
+    messages,
     handleCall,
     handleDisconnect
   };
