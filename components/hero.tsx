@@ -2,18 +2,163 @@
 import { ParticleCanvas } from "@/hooks/particle";
 import { motion, useScroll, useTransform, AnimatePresence } from "framer-motion";
 import Image from "next/image";
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { FaMicrophone, FaPhoneSlash } from "react-icons/fa";
-//import { Wave } from '@foobar404/wave';
+import { useAgent } from "./Agent";
 
 export default function Hero() {
     const {scrollY} = useScroll();
     const y = useTransform(scrollY, [0, 500], [0, 100]);
     const [isCallActive, setIsCallActive] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const [timeLeft, setTimeLeft] = useState(120);
+    const [startTime, setStartTime] = useState<number | null>(null);
+    const [userIP, setUserIP] = useState<string | null>(null);
+    
+    // Usar el hook de agente directamente en el componente
+    const agent = useAgent();
+
+    // Obtener la IP del usuario y el tiempo restante al cargar el componente
+    useEffect(() => {
+        const fetchUserIP = async () => {
+            try {
+                const response = await fetch('/api/user-ip');
+                const data = await response.json();
+                setUserIP(data.ip);
+                
+                // Una vez que tenemos la IP, obtenemos el tiempo restante con forzado de actualización
+                const timeResponse = await fetch('/api/call-time?force=true');
+                const timeData = await timeResponse.json();
+                setTimeLeft(timeData.remainingTime);
+                
+                // Si el tiempo restante es el máximo, probablemente es una IP exenta
+                if (timeData.remainingTime === 120) {
+                    console.log(`IP ${timeData.ip} parece estar exenta (tiempo máximo disponible)`);
+                }
+            } catch (err) {
+                console.error("Error fetching user IP or remaining time:", err);
+                setError("Could not determine your remaining call time. Please try again later.");
+            }
+        };
+        
+        fetchUserIP();
+    }, []);
+
+    // Actualizar el tiempo usado en el servidor cuando la llamada termina
+    const updateTimeUsed = useCallback(async () => {
+        if (startTime !== null && userIP) {
+            const endTime = Date.now();
+            const secondsUsed = Math.ceil((endTime - startTime) / 1000);
+            
+            try {
+                await fetch('/api/call-time', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ secondsUsed }),
+                });
+                
+                // Resetear el tiempo de inicio
+                setStartTime(null);
+            } catch (err) {
+                console.error("Error updating time used:", err);
+            }
+        }
+    }, [startTime, userIP]);
+
+    const handleCallEnd = useCallback(async () => {
+        if (!agent) {
+            setError("Voice assistant not initialized. Please refresh the page.");
+            return;
+        }
+        
+        try {
+            setIsCallActive(false);
+            setError(null);
+            agent.handleDisconnect();
+            
+            // Actualizar el tiempo usado
+            await updateTimeUsed();
+            
+            // Refrescar el tiempo restante
+            const timeResponse = await fetch('/api/call-time');
+            const timeData = await timeResponse.json();
+            setTimeLeft(timeData.remainingTime);
+        } catch (err) {
+            console.error("Error ending call:", err);
+            setError(err instanceof Error ? err.message : "Failed to end call");
+        }
+    }, [agent, updateTimeUsed]);
+
+    // Manejar el temporizador y actualizar el tiempo usado
+    const handleTimer = useCallback(() => {
+        let timer: NodeJS.Timeout;
+        
+        if (isCallActive && timeLeft > 0) {
+            // Guardar el tiempo de inicio si no está establecido
+            if (startTime === null) {
+                setStartTime(Date.now());
+            }
+            
+            timer = setInterval(() => {
+                setTimeLeft((prev) => prev - 1);
+            }, 1000);
+        } else if (timeLeft === 0) {
+            handleCallEnd();
+        }
+        
+        return () => {
+            if (timer) clearInterval(timer);
+        };
+    }, [isCallActive, timeLeft, startTime, handleCallEnd]);
+
+    useEffect(() => {
+        const cleanup = handleTimer();
+        return cleanup;
+    }, [handleTimer]);
+
+    const handleCallStart = async () => {
+        // Si no hay agente, mostrar error
+        if (!agent) {
+            setError("Voice assistant not initialized. Please refresh the page.");
+            return;
+        }
+        
+        // Si no queda tiempo, mostrar error
+        if (timeLeft <= 0) {
+            setError("You have used all your allocated call time (2 minutes). Thank you for your interest!");
+            return;
+        }
+        
+        try {
+            setIsCallActive(true);
+            setError(null);
+            await agent.handleCall();
+        } catch (err) {
+            console.error("Error starting call:", err);
+            setError(err instanceof Error ? err.message : "Failed to start call");
+            setIsCallActive(false);
+            await updateTimeUsed();
+            
+            // Refrescar el tiempo restante
+            const timeResponse = await fetch('/api/call-time');
+            const timeData = await timeResponse.json();
+            setTimeLeft(timeData.remainingTime);
+        }
+    };
+
+    // Manejador específico para el botón de colgar
+    const handleHangupClick = (e: React.MouseEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        handleCallEnd();
+    };
 
     return (
         <section className="min-h-screen relative overflow-hidden bg-black">
             <ParticleCanvas/>
+            
             <div className="max-w-7xl mx-auto px-6 pt-32">
                 <div className="flex flex-col lg:flex-row items-center gap-16">
                     {/* Text content */}
@@ -31,7 +176,7 @@ export default function Hero() {
                             from-primary via-secondary to-tertiary 
                             bg-clip-text text-transparent mb-6"
                         >
-                            AI-Powered
+                            AI Agents &
                             <br />
                             <motion.span
                                 initial={{ opacity: 0, y: 20 }}
@@ -40,7 +185,7 @@ export default function Hero() {
                                 className="bg-gradient-to-r from-primary via-secondary
                                 to-tertiary bg-clip-text text-transparent"
                             >
-                                Developer
+                                Automation
                             </motion.span>
                         </motion.h1>
 
@@ -48,25 +193,87 @@ export default function Hero() {
                             initial={{ opacity: 0, y: 20 }}
                             animate={{ opacity: 1, y: 0 }}
                             transition={{ duration: 0.8, delay: 1.1 }}
-                            className="text-xl text-content/80 mb-8"
+                            className="text-lg text-white/80 mb-8"
                         >
-                            Talk to my AI assistant to learn more about my work and expertise
-                            in React, Node.js, and AI integration.
+                            Specialist in Vapi, Retell, and cutting-edge workflows that save time and reduce costs.
                         </motion.p>
+
+                        {/* Control de tiempo restante */}
+                        {!isCallActive && (
+                            <div className="mb-8">
+                                <span className="block text-sm text-primary">
+                                    You have {Math.floor(timeLeft / 60)}:{(timeLeft % 60).toString().padStart(2, '0')} of call time remaining.
+                                </span>
+                                <button 
+                                    onClick={async () => {
+                                        try {
+                                            const timeResponse = await fetch('/api/call-time?force=true');
+                                            const timeData = await timeResponse.json();
+                                            setTimeLeft(timeData.remainingTime);
+                                            
+                                            // Mostrar mensaje de confirmación
+                                            if (timeData.remainingTime === 120) {
+                                                setError("Your IP is exempt from time limits. You have unlimited time.");
+                                            } else {
+                                                setError(`Time data refreshed: ${timeData.remainingTime} seconds remaining.`);
+                                            }
+                                            
+                                            // Ocultar el mensaje después de 3 segundos
+                                            setTimeout(() => setError(null), 3000);
+                                        } catch (err) {
+                                            console.error("Error refreshing time:", err);
+                                            setError("Could not refresh time data");
+                                        }
+                                    }}
+                                    className="mt-1 text-xs text-blue-400 hover:text-blue-300 underline mr-2"
+                                >
+                                    Refresh time data
+                                </button>
+                                <button 
+                                    onClick={() => {
+                                        // Forzar recarga completa de la página
+                                        window.location.reload();
+                                    }}
+                                    className="mt-1 text-xs text-blue-400 hover:text-blue-300 underline"
+                                >
+                                    Force page refresh
+                                </button>
+                            </div>
+                        )}
+
+                        {/* Error Message */}
+                        <AnimatePresence>
+                            {error && (
+                                <motion.div
+                                    initial={{ opacity: 0, y: 10 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    exit={{ opacity: 0, y: 10 }}
+                                    className="mb-4 p-4 bg-red-500/10 border border-red-500/20 rounded-lg"
+                                >
+                                    <p className="text-red-500 text-sm">{error}</p>
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
 
                         <motion.button
                             initial={{ opacity: 0, y: 20 }}
                             animate={{ opacity: 1, y: 0 }}
                             transition={{ duration: 0.8, delay: 1.2 }}
                             whileHover={{ scale: 1.05 }}
-                            onClick={() => setIsCallActive(true)}
+                            onClick={handleCallStart}
+                            disabled={isCallActive || timeLeft <= 0}
                             className="relative overflow-hidden px-8 py-4 rounded-full bg-surface/30 
                             backdrop-blur-sm border border-white/10 hover:border-primary/30 
-                            transition-all group flex items-center gap-3"
+                            transition-all group flex items-center gap-3 disabled:opacity-50
+                            disabled:cursor-not-allowed"
                         >
                             <FaMicrophone className="text-primary w-5 h-5" />
                             <span className="text-content group-hover:text-primary transition-colors">
-                                Talk to My AI Assistant
+                                {isCallActive 
+                                    ? "Call in Progress..." 
+                                    : timeLeft <= 0 
+                                        ? "Time Limit Reached" 
+                                        : "Talk to My AI Assistant"}
                             </span>
                             <div className="absolute inset-0 bg-gradient-to-r 
                             from-primary/10 to-tertiary/10 opacity-0
@@ -83,41 +290,6 @@ export default function Hero() {
                         style={{y}}
                     >
                         <div className="relative w-full aspect-square group">
-                            {/* Ondas de voz animadas */}
-                            <AnimatePresence>
-                                {isCallActive && (
-                                    <>
-                                        <motion.div
-                                            initial={{ scale: 0.8, opacity: 0 }}
-                                            animate={{ scale: 1, opacity: 1 }}
-                                            exit={{ scale: 0.8, opacity: 0 }}
-                                            className="absolute inset-0 rounded-full"
-                                        >
-                                            {[...Array(3)].map((_, i) => (
-                                                <motion.div
-                                                    key={i}
-                                                    className="absolute inset-0 rounded-full border-2 border-primary/30"
-                                                    animate={{
-                                                        scale: [1, 1.2, 1],
-                                                        opacity: [0.3, 0.1, 0.3],
-                                                    }}
-                                                    transition={{
-                                                        duration: 2,
-                                                        delay: i * 0.3,
-                                                        repeat: Infinity,
-                                                        ease: "easeInOut"
-                                                    }}
-                                                />
-                                            ))}
-                                        </motion.div>
-                                    </>
-                                )}
-                            </AnimatePresence>
-
-                            {/* Sombra degradada */}
-                            <div className="absolute inset-0 rounded-full blur-2xl bg-gradient-to-r 
-                            from-primary/30 via-secondary/30 to-tertiary/30 opacity-70" />
-                            
                             {/* Avatar Container */}
                             <motion.div
                                 animate={isCallActive ? 
@@ -127,32 +299,100 @@ export default function Hero() {
                                 className="relative w-full aspect-square rounded-full overflow-hidden
                                 border border-white/10 bg-surface/30 backdrop-blur-sm"
                             >
-                                <Image 
-                                    src="/portfolio.jpg"
-                                    alt="AI Assistant Avatar"
-                                    fill
-                                    className="object-cover scale-110 group-hover:scale-100
-                                    transition-transform duration-500"
-                                />
-                                
-                                {/* Botón de colgar - Ajustado con rotación */}
-                                <AnimatePresence>
-                                    {isCallActive && (
-                                        <motion.button
-                                        initial={{ opacity: 0, y: 20 }}
-                                        animate={{ opacity: 1, y: 0 }}
-                                        exit={{ opacity: 0, y: 20 }}
-                                        onClick={() => setIsCallActive(false)}
-                                        className="absolute bottom-8 left-0 right-0 mx-auto
-                                        bg-red-500/80 hover:bg-red-500 p-4 rounded-full
-                                        transition-colors w-14 h-14 flex items-center justify-center
-                                        rotate-45"
-                                      >
-                                        <FaPhoneSlash className="w-6 h-6" />
-                                      </motion.button>
-                                    )}
-                                </AnimatePresence>
+                                <div className="relative w-full h-full">
+                                    <Image
+                                        src="/portfolio.jpg"
+                                        alt="Portfolio"
+                                        fill
+                                        sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+                                        className="object-cover"
+                                        priority
+                                    />
+                                </div>
                             </motion.div>
+
+                            {/* Overlay para elementos de la llamada */}
+                            <AnimatePresence>
+                                {isCallActive && (
+                                    <motion.div
+                                        initial={{ opacity: 0 }}
+                                        animate={{ opacity: 1 }}
+                                        exit={{ opacity: 0 }}
+                                        className="absolute inset-0 flex flex-col justify-between p-8"
+                                    >
+                                        {/* Timer */}
+                                        <motion.div
+                                            initial={{ opacity: 0, y: -20 }}
+                                            animate={{ opacity: 1, y: 0 }}
+                                            exit={{ opacity: 0, y: -20 }}
+                                            className="mx-auto bg-black/80 backdrop-blur-sm px-6 py-3 rounded-full
+                                            text-white text-lg font-medium border border-white/20"
+                                        >
+                                            {Math.floor(timeLeft / 60)}:{(timeLeft % 60).toString().padStart(2, '0')}
+                                        </motion.div>
+                                        
+                                        {/* Botón de colgar */}
+                                        <motion.button
+                                            initial={{ opacity: 0, y: 20 }}
+                                            animate={{ opacity: 1, y: 0 }}
+                                            exit={{ opacity: 0, y: 20 }}
+                                            onClick={handleHangupClick}
+                                            className="mx-auto bg-red-500 hover:bg-red-600 p-4 rounded-full
+                                            transition-colors w-16 h-16 flex items-center justify-center
+                                            rotate-[135deg] shadow-lg hover:shadow-red-500/20 cursor-pointer
+                                            z-50"
+                                        >
+                                            <FaPhoneSlash className="w-8 h-8 text-white" />
+                                        </motion.button>
+                                    </motion.div>
+                                )}
+                            </AnimatePresence>
+
+                            {/* Ondas de voz animadas */}
+                            <AnimatePresence>
+                                {isCallActive && (
+                                    <motion.div
+                                        initial={{ scale: 0.8, opacity: 0 }}
+                                        animate={{ scale: 1, opacity: 1 }}
+                                        exit={{ scale: 0.8, opacity: 0 }}
+                                        className="absolute inset-0 rounded-full"
+                                    >
+                                        {[...Array(3)].map((_, i) => (
+                                            <motion.div
+                                                key={i}
+                                                className={`absolute inset-0 rounded-full border-2 ${
+                                                    i % 3 === 0 
+                                                        ? "border-primary/70" 
+                                                        : i % 3 === 1 
+                                                            ? "border-secondary/70" 
+                                                            : "border-tertiary/70"
+                                                }`}
+                                                style={{
+                                                    boxShadow: i % 3 === 0 
+                                                        ? "0 0 8px rgba(94, 114, 235, 0.3)" 
+                                                        : i % 3 === 1 
+                                                            ? "0 0 8px rgba(255, 89, 158, 0.3)" 
+                                                            : "0 0 8px rgba(192, 97, 255, 0.3)"
+                                                }}
+                                                animate={{
+                                                    scale: [1, 1.1 + (i * 0.08), 1],
+                                                    opacity: [0.6, 0.3, 0.6],
+                                                }}
+                                                transition={{
+                                                    duration: 1.8 - (i * 0.2),
+                                                    delay: i * 0.25,
+                                                    repeat: Infinity,
+                                                    ease: "easeInOut"
+                                                }}
+                                            />
+                                        ))}
+                                    </motion.div>
+                                )}
+                            </AnimatePresence>
+
+                            {/* Sombra degradada */}
+                            <div className="absolute inset-0 rounded-full blur-2xl bg-gradient-to-r 
+                            from-primary/30 via-secondary/30 to-tertiary/30 opacity-70" />
                         </div>
                     </motion.div>
                 </div>
