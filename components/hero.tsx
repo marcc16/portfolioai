@@ -3,7 +3,7 @@ import { ParticleCanvas } from "@/hooks/particle";
 import { motion, useScroll, useTransform, AnimatePresence } from "framer-motion";
 import Image from "next/image";
 import { useState, useEffect, useCallback } from "react";
-import { FaMicrophone, FaPhoneSlash } from "react-icons/fa";
+import { FaMicrophone, FaPhoneSlash, FaGithub } from "react-icons/fa";
 import { useAgent } from "./Agent";
 
 export default function Hero() {
@@ -176,7 +176,7 @@ export default function Hero() {
                             from-primary via-secondary to-tertiary 
                             bg-clip-text text-transparent mb-6"
                         >
-                            AI Agents &
+                            AI Voice Agents &
                             <br />
                             <motion.span
                                 initial={{ opacity: 0, y: 20 }}
@@ -195,7 +195,7 @@ export default function Hero() {
                             transition={{ duration: 0.8, delay: 1.1 }}
                             className="text-lg text-white/80 mb-8"
                         >
-                            Specialist in Vapi, Retell, and cutting-edge workflows that save time and reduce costs.
+                            Specialist in Vapi, Retell, n8n, and cutting-edge workflows that save time and reduce costs.
                         </motion.p>
 
                         {/* Control de tiempo restante */}
@@ -254,6 +254,22 @@ export default function Hero() {
                                 </motion.div>
                             )}
                         </AnimatePresence>
+
+                        <motion.div
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ duration: 0.8, delay: 1.3 }}
+                            className="flex gap-4"
+                        >
+                            <a
+                                href="https://github.com/marcc16/portfolioai"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-content hover:text-primary transition-colors"
+                            >
+                                <FaGithub className="w-6 h-6" />
+                            </a>
+                        </motion.div>
 
                         <motion.button
                             initial={{ opacity: 0, y: 20 }}

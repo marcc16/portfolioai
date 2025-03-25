@@ -1,0 +1,18 @@
+n8n-demo {
+    --n8n-frame-background-color: #0f0f14;
+    --n8n-json-background-color: #1c1c24;
+    --n8n-copy-button-background-color: #2a2a3a;
+    --n8n-workflow-min-height: 450px;
+    --n8n-iframe-border-radius: 12px;
+    --n8n-canvas-background-color: #111116;
+    --n8n-node-default-color: #5e72eb;
+    --n8n-node-trigger-color: #ff599e;
+    --n8n-execution-success-color: #c061ff;
+    --n8n-color-primary: #5e72eb;
+    --n8n-color-secondary: #ff599e;
+    --n8n-color-tertiary: #c061ff;
+    --n8n-text-color: #ffffff;
+    --n8n-text-light: #ffffffbb;
+    --n8n-canvas-dot-color: #ffffff22;
+    --n8n-canvas-grid-color: #ffffff11;
+} 
