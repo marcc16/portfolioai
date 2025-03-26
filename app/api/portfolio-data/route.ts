@@ -1,16 +1,16 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 
-const N8N_WEBHOOK_URL = 'https://n8n-n8n.7ywuv8.easypanel.host/webhook-test/b555ea4f-a203-4ac1-afcb-862f8b659600';
+const N8N_WEBHOOK_URL = 'https://n8n-n8n.7ywuv8.easypanel.host/webhook/b555ea4f-a203-4ac1-afcb-862f8b659600';
 
 // Schema de validación con validaciones específicas para cada respuesta
 const automationSchema = z.object({
   responses: z.tuple([
     z.string().min(1, "El tipo de agente de voz es requerido"),
     z.string().min(1, "Debe especificar los sistemas a integrar"),
-    z.string().min(1, "Debe proporcionar nombre y correo electrónico"),
     z.string().min(1, "Debe especificar cuándo desea agendar la llamada")
-  ])
+  ]),
+  email: z.string().email("Debe proporcionar un correo electrónico válido")
 });
 
 export async function POST(request: Request) {
@@ -41,8 +41,8 @@ export async function POST(request: Request) {
     const automationData = {
       agentType: validatedData.data.responses[0],
       integrations: validatedData.data.responses[1],
-      contactInfo: validatedData.data.responses[2],
-      preferredCallTime: validatedData.data.responses[3],
+      contactInfo: validatedData.data.email,
+      preferredCallTime: validatedData.data.responses[2],
       timestamp: new Date().toISOString(),
       source: "portfolio_voice_demo"
     };

@@ -3,7 +3,7 @@ import { ParticleCanvas } from "@/hooks/particle";
 import { motion, useScroll, useTransform, AnimatePresence } from "framer-motion";
 import Image from "next/image";
 import { useState, useEffect, useCallback } from "react";
-import { FaMicrophone, FaPhoneSlash, FaGithub } from "react-icons/fa";
+import { FaMicrophone, FaPhoneSlash } from "react-icons/fa";
 import { useAgent } from "./Agent";
 
 export default function Hero() {
@@ -14,6 +14,8 @@ export default function Hero() {
     const [timeLeft, setTimeLeft] = useState(120);
     const [startTime, setStartTime] = useState<number | null>(null);
     const [userIP, setUserIP] = useState<string | null>(null);
+    const [email, setEmail] = useState<string>("");
+    const [showEmailForm, setShowEmailForm] = useState<boolean>(true);
     
     // Usar el hook de agente directamente en el componente
     const agent = useAgent();
@@ -118,7 +120,9 @@ export default function Hero() {
         return cleanup;
     }, [handleTimer]);
 
-    const handleCallStart = async () => {
+    const handleCallStart = async (e: React.FormEvent) => {
+        e.preventDefault();
+        
         // Si no hay agente, mostrar error
         if (!agent) {
             setError("Voice assistant not initialized. Please refresh the page.");
@@ -130,11 +134,18 @@ export default function Hero() {
             setError("You have used all your allocated call time (2 minutes). Thank you for your interest!");
             return;
         }
+
+        // Si no hay email, mostrar error
+        if (!email) {
+            setError("Please enter your email address");
+            return;
+        }
         
         try {
             setIsCallActive(true);
             setError(null);
-            await agent.handleCall();
+            setShowEmailForm(false);
+            await agent.handleEmailSubmit(e);
         } catch (err) {
             console.error("Error starting call:", err);
             setError(err instanceof Error ? err.message : "Failed to start call");
@@ -261,40 +272,60 @@ export default function Hero() {
                             transition={{ duration: 0.8, delay: 1.3 }}
                             className="flex gap-4"
                         >
-                            <a
-                                href="https://github.com/marcc16/portfolioai"
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-content hover:text-primary transition-colors"
-                            >
-                                <FaGithub className="w-6 h-6" />
-                            </a>
+                            {showEmailForm ? (
+                                <form onSubmit={handleCallStart} className="w-full max-w-md">
+                                    <div className="bg-white/10 backdrop-blur-sm rounded-lg p-4 border border-white/20">
+                                        <p className="text-white/80 mb-4">
+                                            Please enter your email to receive the meeting confirmation:
+                                        </p>
+                                        <div className="flex gap-2">
+                                            <input
+                                                type="email"
+                                                value={email}
+                                                onChange={(e) => setEmail(e.target.value)}
+                                                placeholder="your@email.com"
+                                                className="flex-1 px-4 py-2 rounded-lg bg-white/10 border border-white/20 
+                                                text-white placeholder-white/50 focus:outline-none focus:ring-2 
+                                                focus:ring-primary"
+                                                required
+                                            />
+                                            <button
+                                                type="submit"
+                                                className="px-6 py-2 bg-primary text-white font-medium rounded-lg 
+                                                hover:bg-primary/90 transition-colors"
+                                            >
+                                                Start Call
+                                            </button>
+                                        </div>
+                                    </div>
+                                </form>
+                            ) : (
+                                <motion.button
+                                    initial={{ opacity: 0, y: 20 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    transition={{ duration: 0.8, delay: 1.2 }}
+                                    whileHover={{ scale: 1.05 }}
+                                    onClick={handleCallStart}
+                                    disabled={isCallActive || timeLeft <= 0}
+                                    className="relative overflow-hidden px-8 py-4 rounded-full bg-surface/30 
+                                    backdrop-blur-sm border border-white/10 hover:border-primary/30 
+                                    transition-all group flex items-center gap-3 disabled:opacity-50
+                                    disabled:cursor-not-allowed"
+                                >
+                                    <FaMicrophone className="text-primary w-5 h-5" />
+                                    <span className="text-content group-hover:text-primary transition-colors">
+                                        {isCallActive 
+                                            ? "Call in Progress..." 
+                                            : timeLeft <= 0 
+                                                ? "Time Limit Reached" 
+                                                : "Talk to My AI Assistant"}
+                                    </span>
+                                    <div className="absolute inset-0 bg-gradient-to-r 
+                                    from-primary/10 to-tertiary/10 opacity-0
+                                    group-hover:opacity-100 transition-opacity"/>
+                                </motion.button>
+                            )}
                         </motion.div>
-
-                        <motion.button
-                            initial={{ opacity: 0, y: 20 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ duration: 0.8, delay: 1.2 }}
-                            whileHover={{ scale: 1.05 }}
-                            onClick={handleCallStart}
-                            disabled={isCallActive || timeLeft <= 0}
-                            className="relative overflow-hidden px-8 py-4 rounded-full bg-surface/30 
-                            backdrop-blur-sm border border-white/10 hover:border-primary/30 
-                            transition-all group flex items-center gap-3 disabled:opacity-50
-                            disabled:cursor-not-allowed"
-                        >
-                            <FaMicrophone className="text-primary w-5 h-5" />
-                            <span className="text-content group-hover:text-primary transition-colors">
-                                {isCallActive 
-                                    ? "Call in Progress..." 
-                                    : timeLeft <= 0 
-                                        ? "Time Limit Reached" 
-                                        : "Talk to My AI Assistant"}
-                            </span>
-                            <div className="absolute inset-0 bg-gradient-to-r 
-                            from-primary/10 to-tertiary/10 opacity-0
-                            group-hover:opacity-100 transition-opacity"/>
-                        </motion.button>
                     </motion.div>
 
                     {/* AI Assistant Avatar */}
