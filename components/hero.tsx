@@ -3,7 +3,7 @@ import { ParticleCanvas } from "@/hooks/particle";
 import { motion, useScroll, useTransform, AnimatePresence } from "framer-motion";
 import Image from "next/image";
 import { useState, useEffect, useCallback } from "react";
-import { FaMicrophone, FaPhoneSlash, FaEnvelope } from "react-icons/fa";
+import { FaMicrophone, FaPhoneSlash } from "react-icons/fa";
 import { useAgent } from "./Agent";
 
 export default function Hero() {
@@ -15,10 +15,23 @@ export default function Hero() {
     const [startTime, setStartTime] = useState<number | null>(null);
     const [userIP, setUserIP] = useState<string | null>(null);
     const [email, setEmail] = useState<string>("");
-    const [isEmailSubmitted, setIsEmailSubmitted] = useState(false);
+    const [isEmailValid, setIsEmailValid] = useState(false);
     
-    // Usar el hook de agente directamente en el componente
-    const agent = useAgent(email);
+    // Usar el hook de agente sin email
+    const agent = useAgent();
+
+    // Validar el formato del email
+    const validateEmail = (email: string) => {
+        const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        return re.test(email);
+    };
+
+    // Manejar cambios en el email
+    const handleEmailChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const newEmail = e.target.value;
+        setEmail(newEmail);
+        setIsEmailValid(validateEmail(newEmail));
+    };
 
     // Obtener la IP del usuario y el tiempo restante al cargar el componente
     useEffect(() => {
@@ -80,6 +93,9 @@ export default function Hero() {
             setError(null);
             agent.handleDisconnect();
             
+            // Procesar y enviar respuestas con el email
+            await agent.processAndSendResponses(email);
+            
             // Actualizar el tiempo usado
             await updateTimeUsed();
             
@@ -91,7 +107,7 @@ export default function Hero() {
             console.error("Error ending call:", err);
             setError(err instanceof Error ? err.message : "Failed to end call");
         }
-    }, [agent, updateTimeUsed]);
+    }, [agent, updateTimeUsed, email]);
 
     // Manejar el temporizador y actualizar el tiempo usado
     const handleTimer = useCallback(() => {
@@ -121,6 +137,12 @@ export default function Hero() {
     }, [handleTimer]);
 
     const handleCallStart = async () => {
+        // Validar email antes de iniciar la llamada
+        if (!isEmailValid) {
+            setError("Please enter a valid email address before starting the call.");
+            return;
+        }
+
         // Si no hay agente, mostrar error
         if (!agent) {
             setError("Voice assistant not initialized. Please refresh the page.");
@@ -130,12 +152,6 @@ export default function Hero() {
         // Si no queda tiempo, mostrar error
         if (timeLeft <= 0) {
             setError("You have used all your allocated call time (2 minutes). Thank you for your interest!");
-            return;
-        }
-
-        // Si no se ha enviado el correo, mostrar error
-        if (!isEmailSubmitted) {
-            setError("Please submit your email first to start the call.");
             return;
         }
         
@@ -161,26 +177,6 @@ export default function Hero() {
         e.preventDefault();
         e.stopPropagation();
         handleCallEnd();
-    };
-
-    // Manejador para el envío del correo electrónico
-    const handleEmailSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-        
-        if (!email || !email.includes('@')) {
-            setError("Please enter a valid email address.");
-            return;
-        }
-
-        try {
-            // Aquí puedes guardar el email para usarlo más tarde con n8n
-            // Por ahora solo marcamos como enviado
-            setIsEmailSubmitted(true);
-            setError(null);
-        } catch (err) {
-            console.error("Error submitting email:", err);
-            setError("Failed to submit email. Please try again.");
-        }
     };
 
     return (
@@ -226,96 +222,73 @@ export default function Hero() {
                             Specialist in Vapi, Retell, n8n, and cutting-edge workflows that save time and reduce costs.
                         </motion.p>
 
-                        {/* Email Form */}
-                        {!isEmailSubmitted && (
-                            <motion.form
-                                initial={{ opacity: 0, y: 20 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                transition={{ duration: 0.8, delay: 1.2 }}
-                                onSubmit={handleEmailSubmit}
-                                className="mb-8"
-                            >
-                                <div className="flex gap-4">
-                                    <input
-                                        type="email"
-                                        value={email}
-                                        onChange={(e) => setEmail(e.target.value)}
-                                        placeholder="Enter your email to start"
-                                        className="flex-1 px-6 py-3 rounded-full bg-surface/30 
-                                        backdrop-blur-sm border border-white/10 text-white
-                                        placeholder:text-white/50 focus:outline-none focus:border-primary/50"
-                                        required
-                                    />
-                                    <button
-                                        type="submit"
-                                        className="px-6 py-3 rounded-full bg-primary/20 
-                                        backdrop-blur-sm border border-primary/30 text-primary
-                                        hover:bg-primary/30 transition-colors flex items-center gap-2"
-                                    >
-                                        <FaEnvelope className="w-4 h-4" />
-                                        <span>Submit</span>
-                                    </button>
-                                </div>
-                            </motion.form>
-                        )}
-
-                        {/* Control de tiempo restante */}
-                        {!isCallActive && isEmailSubmitted && (
-                            <div className="mb-8">
-                                
-                                
-                            </div>
-                        )}
-
-                        {/* Error Message */}
-                        <AnimatePresence>
-                            {error && (
-                                <motion.div
-                                    initial={{ opacity: 0, y: 10 }}
-                                    animate={{ opacity: 1, y: 0 }}
-                                    exit={{ opacity: 0, y: 10 }}
-                                    className="mb-4 p-4 bg-red-500/10 border border-red-500/20 rounded-lg"
-                                >
-                                    <p className="text-red-500 text-sm">{error}</p>
-                                </motion.div>
-                            )}
-                        </AnimatePresence>
-
+                        {/* Email input */}
                         <motion.div
                             initial={{ opacity: 0, y: 20 }}
                             animate={{ opacity: 1, y: 0 }}
-                            transition={{ duration: 0.8, delay: 1.3 }}
-                            className="flex gap-4"
+                            transition={{ duration: 0.8, delay: 1.4 }}
+                            className="mb-6"
                         >
-                            
+                            <input
+                                type="email"
+                                value={email}
+                                onChange={handleEmailChange}
+                                placeholder="Enter your email to start"
+                                className={`w-full px-4 py-3 rounded-lg bg-white/10 text-white border ${
+                                    email && !isEmailValid ? 'border-red-500' : 'border-white/20'
+                                } focus:outline-none focus:border-primary transition-colors`}
+                            />
+                            {email && !isEmailValid && (
+                                <p className="text-red-500 text-sm mt-1">Please enter a valid email address</p>
+                            )}
                         </motion.div>
 
-                        <motion.button
+                        {/* Call controls */}
+                        <motion.div
                             initial={{ opacity: 0, y: 20 }}
                             animate={{ opacity: 1, y: 0 }}
-                            transition={{ duration: 0.8, delay: 1.2 }}
-                            whileHover={{ scale: 1.05 }}
-                            onClick={handleCallStart}
-                            disabled={isCallActive || timeLeft <= 0 || !isEmailSubmitted}
-                            className="relative overflow-hidden px-8 py-4 rounded-full bg-surface/30 
-                            backdrop-blur-sm border border-white/10 hover:border-primary/30 
-                            transition-all group flex items-center gap-3 disabled:opacity-50
-                            disabled:cursor-not-allowed"
+                            transition={{ duration: 0.8, delay: 1.7 }}
+                            className="flex items-center gap-4"
                         >
-                            <FaMicrophone className="text-primary w-5 h-5" />
-                            <span className="text-content group-hover:text-primary transition-colors">
-                                {isCallActive 
-                                    ? "Call in Progress..." 
-                                    : !isEmailSubmitted
-                                    ? "Submit Email First"
-                                    : timeLeft <= 0 
-                                        ? "Time Limit Reached" 
-                                        : "Talk to My AI Assistant"}
+                            {!isCallActive ? (
+                                <button
+                                    onClick={handleCallStart}
+                                    disabled={!isEmailValid}
+                                    className={`flex items-center gap-2 px-6 py-3 rounded-full ${
+                                        isEmailValid
+                                            ? 'bg-primary hover:bg-primary/80'
+                                            : 'bg-gray-500 cursor-not-allowed'
+                                    } text-white font-medium transition-colors`}
+                                >
+                                    <FaMicrophone className="text-lg" />
+                                    Start Call
+                                </button>
+                            ) : (
+                                <button
+                                    onClick={handleHangupClick}
+                                    className="flex items-center gap-2 px-6 py-3 rounded-full bg-red-600 hover:bg-red-700 text-white font-medium transition-colors"
+                                >
+                                    <FaPhoneSlash className="text-lg" />
+                                    End Call
+                                </button>
+                            )}
+                            
+                            {/* Timer display */}
+                            <span className="text-white/80">
+                                Time left: {Math.floor(timeLeft / 60)}:{(timeLeft % 60).toString().padStart(2, '0')}
                             </span>
-                            <div className="absolute inset-0 bg-gradient-to-r 
-                            from-primary/10 to-tertiary/10 opacity-0
-                            group-hover:opacity-100 transition-opacity"/>
-                        </motion.button>
+                        </motion.div>
+
+                        {/* Error message */}
+                        {error && (
+                            <motion.p
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                                className="text-red-500 mt-4"
+                            >
+                                {error}
+                            </motion.p>
+                        )}
                     </motion.div>
 
                     {/* AI Assistant Avatar */}

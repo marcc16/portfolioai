@@ -17,7 +17,8 @@ export async function POST(request: Request) {
       email,
       agentType: responses[0] || "",
       integrations: responses[1] || "",
-      preferredCallTime: responses[2] || "",
+      contactInfo: responses[2] || "",
+      preferredCallTime: responses[3] || "",
       timestamp: new Date().toISOString(),
       source: "portfolio_voice_demo"
     };
