@@ -33,6 +33,91 @@ export default function Hero() {
         setIsEmailValid(validateEmail(newEmail));
     };
 
+    // Actualizar el tiempo usado en el servidor cuando la llamada termina
+    const updateTimeUsed = useCallback(async () => {
+        if (startTime !== null && userIP) {
+            const endTime = Date.now();
+            const secondsUsed = Math.ceil((endTime - startTime) / 1000);
+            
+            try {
+                await fetch('/api/call-time', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ secondsUsed }),
+                });
+                
+                // Resetear el tiempo de inicio
+                setStartTime(null);
+            } catch (err) {
+                console.error("Error updating time used:", err);
+            }
+        }
+    }, [startTime, userIP]);
+
+    // Efecto para actualizar isCallActive basado en el estado del agente
+    useEffect(() => {
+        if (agent.callStatus === "FINISHED" || agent.callStatus === "INACTIVE") {
+            setIsCallActive(false);
+            // También detener el temporizador
+            if (startTime !== null) {
+                updateTimeUsed();
+                setStartTime(null);
+            }
+        } else if (agent.callStatus === "ACTIVE" || agent.callStatus === "CONNECTING") {
+            setIsCallActive(true);
+        }
+    }, [agent.callStatus, startTime, updateTimeUsed]);
+
+    const handleCallEnd = useCallback(async () => {
+        if (!agent) {
+            setError("Voice assistant not initialized. Please refresh the page.");
+            return;
+        }
+        
+        try {
+            agent.handleDisconnect();
+            setError(null);
+            
+            // Procesar y enviar respuestas con el email
+            await agent.processAndSendResponses(email);
+            
+            // Actualizar el tiempo usado
+            await updateTimeUsed();
+            
+            // Refrescar el tiempo restante
+            const timeResponse = await fetch('/api/call-time');
+            const timeData = await timeResponse.json();
+            setTimeLeft(timeData.remainingTime);
+        } catch (err) {
+            console.error("Error ending call:", err);
+            setError(err instanceof Error ? err.message : "Failed to end call");
+        }
+    }, [agent, updateTimeUsed, email]);
+
+    // Manejar el temporizador y actualizar el tiempo usado
+    useEffect(() => {
+        let timer: NodeJS.Timeout;
+        
+        if (isCallActive && timeLeft > 0 && agent.callStatus === "ACTIVE") {
+            // Guardar el tiempo de inicio si no está establecido
+            if (startTime === null) {
+                setStartTime(Date.now());
+            }
+            
+            timer = setInterval(() => {
+                setTimeLeft((prev) => prev - 1);
+            }, 1000);
+        } else if (timeLeft === 0 || agent.callStatus === "FINISHED") {
+            handleCallEnd();
+        }
+        
+        return () => {
+            if (timer) clearInterval(timer);
+        };
+    }, [isCallActive, timeLeft, startTime, agent.callStatus, handleCallEnd]);
+
     // Obtener la IP del usuario y el tiempo restante al cargar el componente
     useEffect(() => {
         const fetchUserIP = async () => {
@@ -58,83 +143,6 @@ export default function Hero() {
         
         fetchUserIP();
     }, []);
-
-    // Actualizar el tiempo usado en el servidor cuando la llamada termina
-    const updateTimeUsed = useCallback(async () => {
-        if (startTime !== null && userIP) {
-            const endTime = Date.now();
-            const secondsUsed = Math.ceil((endTime - startTime) / 1000);
-            
-            try {
-                await fetch('/api/call-time', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({ secondsUsed }),
-                });
-                
-                // Resetear el tiempo de inicio
-                setStartTime(null);
-            } catch (err) {
-                console.error("Error updating time used:", err);
-            }
-        }
-    }, [startTime, userIP]);
-
-    const handleCallEnd = useCallback(async () => {
-        if (!agent) {
-            setError("Voice assistant not initialized. Please refresh the page.");
-            return;
-        }
-        
-        try {
-            setIsCallActive(false);
-            setError(null);
-            agent.handleDisconnect();
-            
-            // Procesar y enviar respuestas con el email
-            await agent.processAndSendResponses(email);
-            
-            // Actualizar el tiempo usado
-            await updateTimeUsed();
-            
-            // Refrescar el tiempo restante
-            const timeResponse = await fetch('/api/call-time');
-            const timeData = await timeResponse.json();
-            setTimeLeft(timeData.remainingTime);
-        } catch (err) {
-            console.error("Error ending call:", err);
-            setError(err instanceof Error ? err.message : "Failed to end call");
-        }
-    }, [agent, updateTimeUsed, email]);
-
-    // Manejar el temporizador y actualizar el tiempo usado
-    const handleTimer = useCallback(() => {
-        let timer: NodeJS.Timeout;
-        
-        if (isCallActive && timeLeft > 0) {
-            // Guardar el tiempo de inicio si no está establecido
-            if (startTime === null) {
-                setStartTime(Date.now());
-            }
-            
-            timer = setInterval(() => {
-                setTimeLeft((prev) => prev - 1);
-            }, 1000);
-        } else if (timeLeft === 0) {
-            handleCallEnd();
-        }
-        
-        return () => {
-            if (timer) clearInterval(timer);
-        };
-    }, [isCallActive, timeLeft, startTime, handleCallEnd]);
-
-    useEffect(() => {
-        const cleanup = handleTimer();
-        return cleanup;
-    }, [handleTimer]);
 
     const handleCallStart = async () => {
         // Validar email antes de iniciar la llamada
@@ -236,177 +244,4 @@ export default function Hero() {
                                 placeholder="Enter your email to start"
                                 className={`w-full px-4 py-3 rounded-lg bg-white/10 text-white border ${
                                     email && !isEmailValid ? 'border-red-500' : 'border-white/20'
-                                } focus:outline-none focus:border-primary transition-colors`}
-                            />
-                            {email && !isEmailValid && (
-                                <p className="text-red-500 text-sm mt-1">Please enter a valid email address</p>
-                            )}
-                        </motion.div>
-
-                        {/* Call controls */}
-                        <motion.div
-                            initial={{ opacity: 0, y: 20 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ duration: 0.8, delay: 1.7 }}
-                            className="flex items-center gap-4"
-                        >
-                            {!isCallActive ? (
-                                <button
-                                    onClick={handleCallStart}
-                                    disabled={!isEmailValid}
-                                    className={`flex items-center gap-2 px-6 py-3 rounded-full ${
-                                        isEmailValid
-                                            ? 'bg-primary hover:bg-primary/80'
-                                            : 'bg-gray-500 cursor-not-allowed'
-                                    } text-white font-medium transition-colors`}
-                                >
-                                    <FaMicrophone className="text-lg" />
-                                    Start Call
-                                </button>
-                            ) : (
-                                <button
-                                    onClick={handleHangupClick}
-                                    className="flex items-center gap-2 px-6 py-3 rounded-full bg-red-600 hover:bg-red-700 text-white font-medium transition-colors"
-                                >
-                                    <FaPhoneSlash className="text-lg" />
-                                    End Call
-                                </button>
-                            )}
-                            
-                            {/* Timer display */}
-                            <span className="text-white/80">
-                                Time left: {Math.floor(timeLeft / 60)}:{(timeLeft % 60).toString().padStart(2, '0')}
-                            </span>
-                        </motion.div>
-
-                        {/* Error message */}
-                        {error && (
-                            <motion.p
-                                initial={{ opacity: 0 }}
-                                animate={{ opacity: 1 }}
-                                className="text-red-500 mt-4"
-                            >
-                                {error}
-                            </motion.p>
-                        )}
-                    </motion.div>
-
-                    {/* AI Assistant Avatar */}
-                    <motion.div
-                        initial={{ opacity: 0, x: 50 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{ duration: 1, delay: 0.5, ease: "easeOut" }}
-                        className="lg:w-1/2 relative"
-                        style={{y}}
-                    >
-                        <div className="relative w-full aspect-square group">
-                            {/* Avatar Container */}
-                            <motion.div
-                                animate={isCallActive ? 
-                                    { scale: [1, 1.02, 1], transition: { duration: 2, repeat: Infinity }} : 
-                                    { y: [0, -20, 0], transition: { duration: 6, repeat: Infinity, ease: "easeInOut" }}
-                                }
-                                className="relative w-full aspect-square rounded-full overflow-hidden
-                                border border-white/10 bg-surface/30 backdrop-blur-sm"
-                            >
-                                <div className="relative w-full h-full">
-                                    <Image
-                                        src="/portfolio.jpg"
-                                        alt="Portfolio"
-                                        fill
-                                        sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-                                        className="object-cover"
-                                        priority
-                                    />
-                                </div>
-                            </motion.div>
-
-                            {/* Overlay para elementos de la llamada */}
-                            <AnimatePresence>
-                                {isCallActive && (
-                                    <motion.div
-                                        initial={{ opacity: 0 }}
-                                        animate={{ opacity: 1 }}
-                                        exit={{ opacity: 0 }}
-                                        className="absolute inset-0 flex flex-col justify-between p-8"
-                                    >
-                                        {/* Timer */}
-                                        <motion.div
-                                            initial={{ opacity: 0, y: -20 }}
-                                            animate={{ opacity: 1, y: 0 }}
-                                            exit={{ opacity: 0, y: -20 }}
-                                            className="mx-auto bg-black/80 backdrop-blur-sm px-6 py-3 rounded-full
-                                            text-white text-lg font-medium border border-white/20"
-                                        >
-                                            {Math.floor(timeLeft / 60)}:{(timeLeft % 60).toString().padStart(2, '0')}
-                                        </motion.div>
-                                        
-                                        {/* Botón de colgar */}
-                                        <motion.button
-                                            initial={{ opacity: 0, y: 20 }}
-                                            animate={{ opacity: 1, y: 0 }}
-                                            exit={{ opacity: 0, y: 20 }}
-                                            onClick={handleHangupClick}
-                                            className="mx-auto bg-red-500 hover:bg-red-600 p-4 rounded-full
-                                            transition-colors w-16 h-16 flex items-center justify-center
-                                            rotate-[135deg] shadow-lg hover:shadow-red-500/20 cursor-pointer
-                                            z-50"
-                                        >
-                                            <FaPhoneSlash className="w-8 h-8 text-white" />
-                                        </motion.button>
-                                    </motion.div>
-                                )}
-                            </AnimatePresence>
-
-                            {/* Ondas de voz animadas */}
-                            <AnimatePresence>
-                                {isCallActive && (
-                                    <motion.div
-                                        initial={{ scale: 0.8, opacity: 0 }}
-                                        animate={{ scale: 1, opacity: 1 }}
-                                        exit={{ scale: 0.8, opacity: 0 }}
-                                        className="absolute inset-0 rounded-full"
-                                    >
-                                        {[...Array(3)].map((_, i) => (
-                                            <motion.div
-                                                key={i}
-                                                className={`absolute inset-0 rounded-full border-2 ${
-                                                    i % 3 === 0 
-                                                        ? "border-primary/70" 
-                                                        : i % 3 === 1 
-                                                            ? "border-secondary/70" 
-                                                            : "border-tertiary/70"
-                                                }`}
-                                                style={{
-                                                    boxShadow: i % 3 === 0 
-                                                        ? "0 0 8px rgba(94, 114, 235, 0.3)" 
-                                                        : i % 3 === 1 
-                                                            ? "0 0 8px rgba(255, 89, 158, 0.3)" 
-                                                            : "0 0 8px rgba(192, 97, 255, 0.3)"
-                                                }}
-                                                animate={{
-                                                    scale: [1, 1.1 + (i * 0.08), 1],
-                                                    opacity: [0.6, 0.3, 0.6],
-                                                }}
-                                                transition={{
-                                                    duration: 1.8 - (i * 0.2),
-                                                    delay: i * 0.25,
-                                                    repeat: Infinity,
-                                                    ease: "easeInOut"
-                                                }}
-                                            />
-                                        ))}
-                                    </motion.div>
-                                )}
-                            </AnimatePresence>
-
-                            {/* Sombra degradada */}
-                            <div className="absolute inset-0 rounded-full blur-2xl bg-gradient-to-r 
-                            from-primary/30 via-secondary/30 to-tertiary/30 opacity-70" />
-                        </div>
-                    </motion.div>
-                </div>
-            </div>
-        </section>
-    );
-}
+                                } focus:outline-none focus:border-primary transition-colors`
