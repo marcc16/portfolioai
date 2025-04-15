@@ -1,6 +1,6 @@
 'use client';
 import { ParticleCanvas } from "@/hooks/particle";
-import { motion, useScroll, useTransform, AnimatePresence } from "framer-motion";
+import { motion, useScroll, useTransform } from "framer-motion";
 import Image from "next/image";
 import { useState, useEffect, useCallback } from "react";
 import { FaMicrophone, FaPhoneSlash } from "react-icons/fa";
@@ -244,4 +244,76 @@ export default function Hero() {
                                 placeholder="Enter your email to start"
                                 className={`w-full px-4 py-3 rounded-lg bg-white/10 text-white border ${
                                     email && !isEmailValid ? 'border-red-500' : 'border-white/20'
-                                } focus:outline-none focus:border-primary transition-colors`
+                                } focus:outline-none focus:border-primary transition-colors`}
+                            />
+                            {email && !isEmailValid && (
+                                <p className="text-red-500 text-sm mt-1">Please enter a valid email address</p>
+                            )}
+                        </motion.div>
+
+                        {/* Call controls */}
+                        <motion.div
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ duration: 0.8, delay: 1.7 }}
+                            className="flex items-center gap-4"
+                        >
+                            {!isCallActive ? (
+                                <button
+                                    onClick={handleCallStart}
+                                    disabled={!isEmailValid}
+                                    className={`flex items-center gap-2 px-6 py-3 rounded-full ${
+                                        isEmailValid
+                                            ? 'bg-primary hover:bg-primary/80'
+                                            : 'bg-gray-500 cursor-not-allowed'
+                                    } text-white font-medium transition-colors`}
+                                >
+                                    <FaMicrophone className="text-lg" />
+                                    Start Call
+                                </button>
+                            ) : (
+                                <button
+                                    onClick={handleHangupClick}
+                                    className="flex items-center gap-2 px-6 py-3 rounded-full bg-red-600 hover:bg-red-700 text-white font-medium transition-colors"
+                                >
+                                    <FaPhoneSlash className="text-lg" />
+                                    End Call
+                                </button>
+                            )}
+                            
+                            {/* Timer display */}
+                            <span className="text-white/80">
+                                Time left: {Math.floor(timeLeft / 60)}:{(timeLeft % 60).toString().padStart(2, '0')}
+                            </span>
+                        </motion.div>
+
+                        {/* Error message */}
+                        {error && (
+                            <motion.p
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                                className="text-red-500 mt-4"
+                            >
+                                {error}
+                            </motion.p>
+                        )}
+                    </motion.div>
+
+                    {/* Image/Animation content */}
+                    <motion.div
+                        style={{ y }}
+                        className="lg:w-1/2"
+                    >
+                        <Image
+                            src="/hero-image.png"
+                            alt="AI Voice Agents"
+                            width={600}
+                            height={600}
+                            className="w-full h-auto"
+                        />
+                    </motion.div>
+                </div>
+            </div>
+        </section>
+    );
+}
