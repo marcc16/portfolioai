@@ -1,5 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getUserRemainingTime, updateUserTimeUsed } from '@/lib/upstash';
+
+// In-memory storage for user time tracking
+const userTimeUsed: { [key: string]: number } = {};
+const MAX_TIME_PER_USER = 3600; // 1 hour in seconds
+
+// Get remaining time for a user
+async function getUserRemainingTime(ip: string): Promise<number> {
+  const timeUsed = userTimeUsed[ip] || 0;
+  return Math.max(0, MAX_TIME_PER_USER - timeUsed);
+}
+
+// Update time used by a user
+async function updateUserTimeUsed(ip: string, secondsUsed: number): Promise<void> {
+  const currentTimeUsed = userTimeUsed[ip] || 0;
+  userTimeUsed[ip] = Math.min(MAX_TIME_PER_USER, currentTimeUsed + secondsUsed);
+}
 
 export async function GET(request: NextRequest) {
   // Obtener la IP del usuario
@@ -7,11 +22,8 @@ export async function GET(request: NextRequest) {
   const realIp = request.headers.get('x-real-ip');
   const ip = forwardedFor?.split(',')[0] || realIp || '127.0.0.1';
 
-  // Forzar una verificación actualizada desde Redis
-  const forceRefresh = request.nextUrl.searchParams.get('force') === 'true';
-
-  // Obtener tiempo restante con caché invalidada si se solicita
-  const remainingTime = await getUserRemainingTime(ip, forceRefresh);
+  // Obtener tiempo restante
+  const remainingTime = await getUserRemainingTime(ip);
 
   return NextResponse.json({ 
     remainingTime,
@@ -33,7 +45,7 @@ export async function POST(request: NextRequest) {
     await updateUserTimeUsed(ip, secondsUsed);
 
     // Obtener el nuevo tiempo restante
-    const remainingTime = await getUserRemainingTime(ip, true);
+    const remainingTime = await getUserRemainingTime(ip);
 
     return NextResponse.json({ 
       success: true, 

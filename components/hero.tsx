@@ -3,7 +3,7 @@ import { ParticleCanvas } from "@/hooks/particle";
 import { motion, useScroll, useTransform, AnimatePresence } from "framer-motion";
 import Image from "next/image";
 import { useState, useEffect, useCallback } from "react";
-import { FaMicrophone, FaPhoneSlash } from "react-icons/fa";
+import { FaMicrophone, FaPhoneSlash, FaEnvelope } from "react-icons/fa";
 import { useAgent } from "./Agent";
 
 export default function Hero() {
@@ -15,10 +15,10 @@ export default function Hero() {
     const [startTime, setStartTime] = useState<number | null>(null);
     const [userIP, setUserIP] = useState<string | null>(null);
     const [email, setEmail] = useState<string>("");
-    const [showEmailForm, setShowEmailForm] = useState<boolean>(true);
+    const [isEmailSubmitted, setIsEmailSubmitted] = useState(false);
     
     // Usar el hook de agente directamente en el componente
-    const agent = useAgent();
+    const agent = useAgent(email);
 
     // Obtener la IP del usuario y el tiempo restante al cargar el componente
     useEffect(() => {
@@ -120,9 +120,7 @@ export default function Hero() {
         return cleanup;
     }, [handleTimer]);
 
-    const handleCallStart = async (e: React.FormEvent) => {
-        e.preventDefault();
-        
+    const handleCallStart = async () => {
         // Si no hay agente, mostrar error
         if (!agent) {
             setError("Voice assistant not initialized. Please refresh the page.");
@@ -135,17 +133,16 @@ export default function Hero() {
             return;
         }
 
-        // Si no hay email, mostrar error
-        if (!email) {
-            setError("Please enter your email address");
+        // Si no se ha enviado el correo, mostrar error
+        if (!isEmailSubmitted) {
+            setError("Please submit your email first to start the call.");
             return;
         }
         
         try {
             setIsCallActive(true);
             setError(null);
-            setShowEmailForm(false);
-            await agent.handleEmailSubmit(e);
+            await agent.handleCall();
         } catch (err) {
             console.error("Error starting call:", err);
             setError(err instanceof Error ? err.message : "Failed to start call");
@@ -164,6 +161,26 @@ export default function Hero() {
         e.preventDefault();
         e.stopPropagation();
         handleCallEnd();
+    };
+
+    // Manejador para el envío del correo electrónico
+    const handleEmailSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        
+        if (!email || !email.includes('@')) {
+            setError("Please enter a valid email address.");
+            return;
+        }
+
+        try {
+            // Aquí puedes guardar el email para usarlo más tarde con n8n
+            // Por ahora solo marcamos como enviado
+            setIsEmailSubmitted(true);
+            setError(null);
+        } catch (err) {
+            console.error("Error submitting email:", err);
+            setError("Failed to submit email. Please try again.");
+        }
     };
 
     return (
@@ -209,46 +226,44 @@ export default function Hero() {
                             Specialist in Vapi, Retell, n8n, and cutting-edge workflows that save time and reduce costs.
                         </motion.p>
 
+                        {/* Email Form */}
+                        {!isEmailSubmitted && (
+                            <motion.form
+                                initial={{ opacity: 0, y: 20 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{ duration: 0.8, delay: 1.2 }}
+                                onSubmit={handleEmailSubmit}
+                                className="mb-8"
+                            >
+                                <div className="flex gap-4">
+                                    <input
+                                        type="email"
+                                        value={email}
+                                        onChange={(e) => setEmail(e.target.value)}
+                                        placeholder="Enter your email to start"
+                                        className="flex-1 px-6 py-3 rounded-full bg-surface/30 
+                                        backdrop-blur-sm border border-white/10 text-white
+                                        placeholder:text-white/50 focus:outline-none focus:border-primary/50"
+                                        required
+                                    />
+                                    <button
+                                        type="submit"
+                                        className="px-6 py-3 rounded-full bg-primary/20 
+                                        backdrop-blur-sm border border-primary/30 text-primary
+                                        hover:bg-primary/30 transition-colors flex items-center gap-2"
+                                    >
+                                        <FaEnvelope className="w-4 h-4" />
+                                        <span>Submit</span>
+                                    </button>
+                                </div>
+                            </motion.form>
+                        )}
+
                         {/* Control de tiempo restante */}
-                        {!isCallActive && (
+                        {!isCallActive && isEmailSubmitted && (
                             <div className="mb-8">
-                                <span className="block text-sm text-primary">
-                                    You have {Math.floor(timeLeft / 60)}:{(timeLeft % 60).toString().padStart(2, '0')} of call time remaining.
-                                </span>
-                                <button 
-                                    onClick={async () => {
-                                        try {
-                                            const timeResponse = await fetch('/api/call-time?force=true');
-                                            const timeData = await timeResponse.json();
-                                            setTimeLeft(timeData.remainingTime);
-                                            
-                                            // Mostrar mensaje de confirmación
-                                            if (timeData.remainingTime === 120) {
-                                                setError("Your IP is exempt from time limits. You have unlimited time.");
-                                            } else {
-                                                setError(`Time data refreshed: ${timeData.remainingTime} seconds remaining.`);
-                                            }
-                                            
-                                            // Ocultar el mensaje después de 3 segundos
-                                            setTimeout(() => setError(null), 3000);
-                                        } catch (err) {
-                                            console.error("Error refreshing time:", err);
-                                            setError("Could not refresh time data");
-                                        }
-                                    }}
-                                    className="mt-1 text-xs text-blue-400 hover:text-blue-300 underline mr-2"
-                                >
-                                    Refresh time data
-                                </button>
-                                <button 
-                                    onClick={() => {
-                                        // Forzar recarga completa de la página
-                                        window.location.reload();
-                                    }}
-                                    className="mt-1 text-xs text-blue-400 hover:text-blue-300 underline"
-                                >
-                                    Force page refresh
-                                </button>
+                                
+                                
                             </div>
                         )}
 
@@ -272,60 +287,35 @@ export default function Hero() {
                             transition={{ duration: 0.8, delay: 1.3 }}
                             className="flex gap-4"
                         >
-                            {showEmailForm ? (
-                                <form onSubmit={handleCallStart} className="w-full max-w-md">
-                                    <div className="bg-white/10 backdrop-blur-sm rounded-lg p-4 border border-white/20">
-                                        <p className="text-white/80 mb-4">
-                                            Please enter your email to receive the meeting confirmation:
-                                        </p>
-                                        <div className="flex gap-2">
-                                            <input
-                                                type="email"
-                                                value={email}
-                                                onChange={(e) => setEmail(e.target.value)}
-                                                placeholder="your@email.com"
-                                                className="flex-1 px-4 py-2 rounded-lg bg-white/10 border border-white/20 
-                                                text-white placeholder-white/50 focus:outline-none focus:ring-2 
-                                                focus:ring-primary"
-                                                required
-                                            />
-                                            <button
-                                                type="submit"
-                                                className="px-6 py-2 bg-primary text-white font-medium rounded-lg 
-                                                hover:bg-primary/90 transition-colors"
-                                            >
-                                                Start Call
-                                            </button>
-                                        </div>
-                                    </div>
-                                </form>
-                            ) : (
-                                <motion.button
-                                    initial={{ opacity: 0, y: 20 }}
-                                    animate={{ opacity: 1, y: 0 }}
-                                    transition={{ duration: 0.8, delay: 1.2 }}
-                                    whileHover={{ scale: 1.05 }}
-                                    onClick={handleCallStart}
-                                    disabled={isCallActive || timeLeft <= 0}
-                                    className="relative overflow-hidden px-8 py-4 rounded-full bg-surface/30 
-                                    backdrop-blur-sm border border-white/10 hover:border-primary/30 
-                                    transition-all group flex items-center gap-3 disabled:opacity-50
-                                    disabled:cursor-not-allowed"
-                                >
-                                    <FaMicrophone className="text-primary w-5 h-5" />
-                                    <span className="text-content group-hover:text-primary transition-colors">
-                                        {isCallActive 
-                                            ? "Call in Progress..." 
-                                            : timeLeft <= 0 
-                                                ? "Time Limit Reached" 
-                                                : "Talk to My AI Assistant"}
-                                    </span>
-                                    <div className="absolute inset-0 bg-gradient-to-r 
-                                    from-primary/10 to-tertiary/10 opacity-0
-                                    group-hover:opacity-100 transition-opacity"/>
-                                </motion.button>
-                            )}
+                            
                         </motion.div>
+
+                        <motion.button
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ duration: 0.8, delay: 1.2 }}
+                            whileHover={{ scale: 1.05 }}
+                            onClick={handleCallStart}
+                            disabled={isCallActive || timeLeft <= 0 || !isEmailSubmitted}
+                            className="relative overflow-hidden px-8 py-4 rounded-full bg-surface/30 
+                            backdrop-blur-sm border border-white/10 hover:border-primary/30 
+                            transition-all group flex items-center gap-3 disabled:opacity-50
+                            disabled:cursor-not-allowed"
+                        >
+                            <FaMicrophone className="text-primary w-5 h-5" />
+                            <span className="text-content group-hover:text-primary transition-colors">
+                                {isCallActive 
+                                    ? "Call in Progress..." 
+                                    : !isEmailSubmitted
+                                    ? "Submit Email First"
+                                    : timeLeft <= 0 
+                                        ? "Time Limit Reached" 
+                                        : "Talk to My AI Assistant"}
+                            </span>
+                            <div className="absolute inset-0 bg-gradient-to-r 
+                            from-primary/10 to-tertiary/10 opacity-0
+                            group-hover:opacity-100 transition-opacity"/>
+                        </motion.button>
                     </motion.div>
 
                     {/* AI Assistant Avatar */}

@@ -44,7 +44,7 @@ const CALL_END_ERRORS = [
 ];
 
 // Hook personalizado para la gestión del agente de voz
-export function useAgent() {
+export function useAgent(userEmail: string) {
   const [callStatus, setCallStatus] = useState<CallStatus>(CallStatus.INACTIVE);
   const [messages, setMessages] = useState<SavedMessage[]>([]);
   const [isSpeaking, setIsSpeaking] = useState(false);
@@ -82,6 +82,7 @@ export function useAgent() {
   };
 
   // Función auxiliar para verificar si un error indica fin de llamada
+<<<<<<< HEAD
   const isCallEndError = (error: VapiError): boolean => {
     const errorMsg = error?.errorMsg || error?.message || error?.toString?.() || '';
     return CALL_END_ERRORS.some(msg => errorMsg.includes(msg));
@@ -99,6 +100,41 @@ export function useAgent() {
     setCallStatus(CallStatus.FINISHED);
     vapi.stop();
     console.log('✅ [VAPI] Llamada finalizada manualmente');
+=======
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const isCallEndError = (error: any): boolean => {
+    const errorMsg = error?.errorMsg || error?.message || error?.toString();
+    return CALL_END_ERRORS.some(msg => errorMsg.includes(msg));
+  };
+
+  // Función para procesar las respuestas y enviarlas al endpoint
+  const processAndSendResponses = async () => {
+    // Filtrar solo las respuestas del usuario
+    const userResponses = messages
+      .filter(msg => msg.role === "user")
+      .map(msg => msg.content);
+
+    try {
+      const response = await fetch('/api/portfolio-data', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          responses: userResponses,
+          email: userEmail
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to send responses to server');
+      }
+
+      console.log('✅ [Agent] Respuestas enviadas exitosamente');
+    } catch (error) {
+      console.error('❌ [Agent] Error enviando respuestas:', error);
+    }
+>>>>>>> funciona-sin-email
   };
 
   // Configurar los listeners de Vapi
@@ -117,7 +153,12 @@ export function useAgent() {
       console.log('📝 [VAPI] Mensajes acumulados:', messagesRef.current);
       await updateCallTime();
       setCallStatus(CallStatus.FINISHED);
+<<<<<<< HEAD
       setIsSpeaking(false);
+=======
+      // Procesar y enviar respuestas cuando termina la llamada
+      processAndSendResponses();
+>>>>>>> funciona-sin-email
     };
 
     const onMessage = (message: Message) => {
@@ -138,7 +179,11 @@ export function useAgent() {
       setIsSpeaking(false);
     };
 
+<<<<<<< HEAD
     const onError = async (error: VapiError) => {
+=======
+    const onError = (error: Error | unknown) => {
+>>>>>>> funciona-sin-email
       console.error('❌ [VAPI] Error:', error);
       
       // Si el error indica fin de llamada, actualizamos el estado
@@ -147,6 +192,8 @@ export function useAgent() {
         await updateCallTime();
         setCallStatus(CallStatus.FINISHED);
         setIsSpeaking(false);
+        // También procesamos las respuestas en caso de error de fin de llamada
+        processAndSendResponses();
       }
     };
 
@@ -169,7 +216,11 @@ export function useAgent() {
       vapiInstance.off("speech-end", onSpeechEnd);
       vapiInstance.off("error", onError);
     };
+<<<<<<< HEAD
   }, []); // Removemos messages de las dependencias
+=======
+  }, [messages, userEmail]); // Añadimos userEmail como dependencia
+>>>>>>> funciona-sin-email
 
   // Actualizar el último mensaje cuando cambia la lista de mensajes
   useEffect(() => {
