@@ -1,57 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { Redis } from '@upstash/redis';
 
-// Importar funciones para limpiar caché
-let resetExemptIPsCache: (() => void) | null = null;
-
-// Intentar importar la función de forma dinámica
-try {
-  // Cargamos dinámicamente el módulo upstash para evitar ciclos de importación
-  import('@/lib/upstash').then(upstash => {
-    // Si el módulo tiene una función resetExemptIPsCache, la usamos
-    if (typeof upstash.resetExemptIPsCache === 'function') {
-      resetExemptIPsCache = upstash.resetExemptIPsCache as () => void;
-    }
-  });
-} catch (e) {
-  console.error('Error loading upstash module for cache invalidation:', e);
-}
-
-// Inicializar el cliente de Redis
-const redis = new Redis({
-  url: process.env.UPSTASH_REDIS_REST_URL || '',
-  token: process.env.UPSTASH_REDIS_REST_TOKEN || '',
-});
-
-// Clave para almacenar las IPs exentas
-const EXEMPT_IPS_KEY = 'exempt_ips';
+// In-memory storage for exempt IPs
+let exemptIPs: string[] = ['127.0.0.1'];
 
 // Contraseña para administrar las IPs exentas (¡cámbiala!)
 const ADMIN_PASSWORD = 'tu-contraseña-secreta';
 
 // Obtener las IPs exentas
 async function getExemptIPs(): Promise<string[]> {
-  try {
-    const ips = await redis.get<string[]>(EXEMPT_IPS_KEY);
-    return ips || ['127.0.0.1'];
-  } catch (error) {
-    console.error('Error getting exempt IPs:', error);
-    return ['127.0.0.1'];
-  }
+  return exemptIPs;
 }
 
 // Guardar las IPs exentas
 async function saveExemptIPs(ips: string[]): Promise<void> {
-  try {
-    await redis.set(EXEMPT_IPS_KEY, ips);
-    
-    // Intentar invalidar caché si existe la función
-    if (resetExemptIPsCache) {
-      resetExemptIPsCache();
-    }
-  } catch (error) {
-    console.error('Error saving exempt IPs:', error);
-  }
+  exemptIPs = ips;
 }
 
 // GET: Obtener la lista de IPs exentas
@@ -66,7 +28,6 @@ export async function GET(request: NextRequest) {
     );
   }
   
-  const exemptIPs = await getExemptIPs();
   return NextResponse.json({ exemptIPs });
 }
 
@@ -93,9 +54,6 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    // Obtener IPs exentas actuales
-    const exemptIPs = await getExemptIPs();
-    
     // Comprobar si la IP ya está exenta
     if (exemptIPs.includes(ip)) {
       return NextResponse.json({
@@ -110,8 +68,7 @@ export async function POST(request: NextRequest) {
     
     return NextResponse.json({
       message: 'IP added to exempt list',
-      exemptIPs,
-      cacheReset: !!resetExemptIPsCache
+      exemptIPs
     });
   } catch (error) {
     console.error('Error adding exempt IP:', error);
@@ -145,9 +102,6 @@ export async function DELETE(request: NextRequest) {
       );
     }
     
-    // Obtener IPs exentas actuales
-    const exemptIPs = await getExemptIPs();
-    
     // Filtrar la IP a eliminar
     const updatedIPs = exemptIPs.filter(exemptIP => exemptIP !== ip);
     
@@ -156,8 +110,7 @@ export async function DELETE(request: NextRequest) {
     
     return NextResponse.json({
       message: 'IP removed from exempt list',
-      exemptIPs: updatedIPs,
-      cacheReset: !!resetExemptIPsCache
+      exemptIPs: updatedIPs
     });
   } catch (error) {
     console.error('Error removing exempt IP:', error);
