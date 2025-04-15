@@ -62,8 +62,7 @@ export function useAgent() {
         body: JSON.stringify({
           responses: [
             userMessages[0]?.content || "",
-            userMessages[1]?.content || "",
-            userMessages[2]?.content || ""
+            userMessages[1]?.content || ""
           ],
           email: email
         }),
