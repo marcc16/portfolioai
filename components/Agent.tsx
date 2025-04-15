@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { vapi } from "@/lib/vapi.sdk";
 
 enum CallStatus {
@@ -23,19 +23,6 @@ interface SavedMessage {
   content: string;
 }
 
-interface VapiError {
-  errorMsg?: string;
-  message?: string;
-  toString?: () => string;
-  action?: string;
-  callClientId?: string;
-  error?: {
-    type?: string;
-    msg?: string;
-    details?: unknown;
-  };
-}
-
 // Lista de errores esperados que indican fin de llamada
 const CALL_END_ERRORS = [
   "Meeting has ended",
@@ -49,58 +36,13 @@ export function useAgent(userEmail: string) {
   const [messages, setMessages] = useState<SavedMessage[]>([]);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [lastMessage, setLastMessage] = useState<string>("");
-  const [email, setEmail] = useState<string>("");
-  const [showEmailForm, setShowEmailForm] = useState<boolean>(true);
-  const messagesRef = useRef<SavedMessage[]>([]);
-  const callStartTimeRef = useRef<number | null>(null);
-
-  // Actualizar la ref cuando cambian los mensajes
-  useEffect(() => {
-    messagesRef.current = messages;
-  }, [messages]);
-
-  // Función para actualizar el tiempo de llamada
-  const updateCallTime = async () => {
-    if (!callStartTimeRef.current) return;
-
-    const secondsUsed = Math.floor((Date.now() - callStartTimeRef.current) / 1000);
-    try {
-      const response = await fetch('/api/call-time', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ secondsUsed }),
-      });
-
-      if (!response.ok) {
-        console.error('Error updating call time:', await response.text());
-      }
-    } catch (error) {
-      console.error('Error updating call time:', error);
-    }
-  };
+  const [responses, setResponses] = useState({
+    agentType: "",
+    integrations: "",
+    preferredCallTime: ""
+  });
 
   // Función auxiliar para verificar si un error indica fin de llamada
-<<<<<<< HEAD
-  const isCallEndError = (error: VapiError): boolean => {
-    const errorMsg = error?.errorMsg || error?.message || error?.toString?.() || '';
-    return CALL_END_ERRORS.some(msg => errorMsg.includes(msg));
-  };
-
-  // Función para finalizar la llamada
-  const handleDisconnect = async () => {
-    if (!vapi) {
-      console.error("❌ [VAPI] Voice assistant not initialized");
-      return;
-    }
-
-    console.log('🔄 [VAPI] Finalizando llamada...');
-    await updateCallTime();
-    setCallStatus(CallStatus.FINISHED);
-    vapi.stop();
-    console.log('✅ [VAPI] Llamada finalizada manualmente');
-=======
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const isCallEndError = (error: any): boolean => {
     const errorMsg = error?.errorMsg || error?.message || error?.toString();
@@ -109,10 +51,15 @@ export function useAgent(userEmail: string) {
 
   // Función para procesar las respuestas y enviarlas al endpoint
   const processAndSendResponses = async () => {
-    // Filtrar solo las respuestas del usuario
-    const userResponses = messages
-      .filter(msg => msg.role === "user")
-      .map(msg => msg.content);
+    // Obtener las respuestas del usuario en orden
+    const userMessages = messages.filter(msg => msg.role === "user");
+    
+    // Actualizar las respuestas en orden
+    setResponses({
+      agentType: userMessages[0]?.content || "",
+      integrations: userMessages[1]?.content || "",
+      preferredCallTime: userMessages[2]?.content || ""
+    });
 
     try {
       const response = await fetch('/api/portfolio-data', {
@@ -121,7 +68,11 @@ export function useAgent(userEmail: string) {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          responses: userResponses,
+          responses: [
+            userMessages[0]?.content || "",
+            userMessages[1]?.content || "",
+            userMessages[2]?.content || ""
+          ],
           email: userEmail
         }),
       });
@@ -134,7 +85,6 @@ export function useAgent(userEmail: string) {
     } catch (error) {
       console.error('❌ [Agent] Error enviando respuestas:', error);
     }
->>>>>>> funciona-sin-email
   };
 
   // Configurar los listeners de Vapi
@@ -144,21 +94,15 @@ export function useAgent(userEmail: string) {
 
     const onCallStart = () => {
       console.log('🟢 [VAPI] Llamada iniciada');
-      callStartTimeRef.current = Date.now();
       setCallStatus(CallStatus.ACTIVE);
     };
 
-    const onCallEnd = async () => {
+    const onCallEnd = () => {
       console.log('🔴 [VAPI] Llamada finalizada');
-      console.log('📝 [VAPI] Mensajes acumulados:', messagesRef.current);
-      await updateCallTime();
+      console.log('📝 [VAPI] Mensajes acumulados:', messages);
       setCallStatus(CallStatus.FINISHED);
-<<<<<<< HEAD
-      setIsSpeaking(false);
-=======
       // Procesar y enviar respuestas cuando termina la llamada
       processAndSendResponses();
->>>>>>> funciona-sin-email
     };
 
     const onMessage = (message: Message) => {
@@ -179,17 +123,12 @@ export function useAgent(userEmail: string) {
       setIsSpeaking(false);
     };
 
-<<<<<<< HEAD
-    const onError = async (error: VapiError) => {
-=======
     const onError = (error: Error | unknown) => {
->>>>>>> funciona-sin-email
       console.error('❌ [VAPI] Error:', error);
       
       // Si el error indica fin de llamada, actualizamos el estado
       if (isCallEndError(error)) {
         console.log('🔄 [VAPI] Error de fin de llamada detectado, actualizando estado');
-        await updateCallTime();
         setCallStatus(CallStatus.FINISHED);
         setIsSpeaking(false);
         // También procesamos las respuestas en caso de error de fin de llamada
@@ -216,11 +155,7 @@ export function useAgent(userEmail: string) {
       vapiInstance.off("speech-end", onSpeechEnd);
       vapiInstance.off("error", onError);
     };
-<<<<<<< HEAD
-  }, []); // Removemos messages de las dependencias
-=======
-  }, [messages, userEmail]); // Añadimos userEmail como dependencia
->>>>>>> funciona-sin-email
+  }, [messages, userEmail]);
 
   // Actualizar el último mensaje cuando cambia la lista de mensajes
   useEffect(() => {
@@ -238,15 +173,9 @@ export function useAgent(userEmail: string) {
       return;
     }
 
-    if (!email) {
-      console.error("❌ [VAPI] Email is required");
-      return;
-    }
-
     try {
       console.log('🔄 [VAPI] Iniciando llamada...');
       setCallStatus(CallStatus.CONNECTING);
-      setShowEmailForm(false);
 
       if (!process.env.NEXT_PUBLIC_VAPI_WORKFLOW_ID) {
         throw new Error("Workflow ID not configured");
@@ -261,24 +190,27 @@ export function useAgent(userEmail: string) {
     }
   };
 
-  // Función para manejar el envío del email
-  const handleEmailSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (email) {
-      handleCall();
+  // Función para finalizar la llamada
+  const handleDisconnect = () => {
+    if (!vapi) {
+      console.error("❌ [VAPI] Voice assistant not initialized");
+      return;
     }
+
+    console.log('🔄 [VAPI] Finalizando llamada...');
+    setCallStatus(CallStatus.FINISHED);
+    vapi.stop();
+    console.log('✅ [VAPI] Llamada finalizada manualmente');
   };
 
   // Devolver las propiedades y métodos necesarios
   return {
     callStatus,
     isSpeaking,
-    lastMessage,
     messages,
-    email,
-    setEmail,
-    showEmailForm,
-    handleEmailSubmit,
+    lastMessage,
+    responses,
+    handleCall,
     handleDisconnect
   };
 }
@@ -323,59 +255,52 @@ export function TranscriptView({ messages, lastMessage }: { messages: SavedMessa
   );
 }
 
-// Componente principal del agente
-export default function Agent() {
+// Componente principal que utiliza el hook
+export default function Agent({ userEmail }: { userEmail: string }) {
   const {
     callStatus,
-    lastMessage,
+    isSpeaking,
     messages,
-    email,
-    setEmail,
-    showEmailForm,
-    handleEmailSubmit,
+    lastMessage,
+    responses,
+    handleCall,
     handleDisconnect
-  } = useAgent();
+  } = useAgent(userEmail);
 
   return (
-    <div className="w-full max-w-4xl mx-auto p-4">
+    <div className="w-full max-w-4xl mx-auto px-4">
+      {/* Estado de la llamada */}
+      <div className="text-center mb-6">
+        <p className="text-lg font-medium">
+          Estado: {" "}
+          <span className={`${
+            callStatus === "ACTIVE" ? "text-green-600" :
+            callStatus === "CONNECTING" ? "text-yellow-600" :
+            callStatus === "FINISHED" ? "text-red-600" :
+            "text-gray-600"
+          }`}>
+            {callStatus === "ACTIVE" ? "En llamada" :
+             callStatus === "CONNECTING" ? "Conectando..." :
+             callStatus === "FINISHED" ? "Llamada finalizada" :
+             "Listo para llamar"}
+          </span>
+          {isSpeaking && callStatus === "ACTIVE" && (
+            <span className="ml-2 inline-block animate-pulse">🎤</span>
+          )}
+        </p>
+      </div>
+
       {/* Controles de llamada */}
       <div className="flex flex-col items-center gap-4 mb-6">
-        {showEmailForm ? (
-          <form onSubmit={handleEmailSubmit} className="w-full max-w-md">
-            <div className="bg-white rounded-lg shadow-lg p-6">
-              <h3 className="text-lg font-semibold mb-4">Antes de comenzar</h3>
-              <p className="text-gray-600 mb-4">
-                Por favor, introduce tu correo electrónico para recibir la confirmación de la reunión:
-              </p>
-              <div className="flex gap-2">
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="tu@email.com"
-                  className="flex-1 px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  required
-                />
-                <button
-                  type="submit"
-                  className="px-6 py-2 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition-colors"
-                >
-                  Iniciar llamada
-                </button>
-              </div>
-            </div>
-          </form>
-        ) : callStatus !== "ACTIVE" ? (
+        {callStatus !== "ACTIVE" ? (
           <button
             className={`px-6 py-3 rounded-full bg-blue-600 text-white font-medium hover:bg-blue-700 transition-colors relative ${
               callStatus === "CONNECTING" ? "animate-pulse" : ""
             }`}
-            onClick={handleEmailSubmit}
+            onClick={handleCall}
           >
             <span className="relative">
-              {callStatus === "INACTIVE" || callStatus === "FINISHED"
-                ? "Iniciar llamada"
-                : "Conectando..."}
+              {callStatus === "CONNECTING" ? "Conectando..." : "Iniciar llamada"}
             </span>
           </button>
         ) : (
@@ -388,8 +313,56 @@ export default function Agent() {
         )}
       </div>
 
-      {/* Visualización de la transcripción */}
-      <TranscriptView messages={messages} lastMessage={lastMessage} />
+      {/* Transcripción en tiempo real */}
+      <div className="bg-gray-50 rounded-lg p-6 shadow-lg">
+        <h3 className="text-lg font-semibold mb-4">Transcripción en tiempo real</h3>
+        <div className="space-y-4">
+          {messages.map((message, index) => (
+            <div
+              key={index}
+              className={`p-4 rounded-lg ${
+                message.role === "assistant"
+                  ? "bg-blue-100 text-blue-800"
+                  : "bg-gray-100 text-gray-800"
+              }`}
+            >
+              <p className="text-sm font-medium mb-1">
+                {message.role === "assistant" ? "Asistente" : "Tú"}:
+              </p>
+              <p>{message.content}</p>
+            </div>
+          ))}
+          {messages.length === 0 && (
+            <p className="text-gray-500 text-center py-4">
+              La transcripción aparecerá aquí durante la llamada...
+            </p>
+          )}
+        </div>
+
+        {/* Último mensaje con animación */}
+        {lastMessage && (
+          <div className="mt-4 p-3 bg-gray-50 rounded-lg">
+            <p
+              key={lastMessage}
+              className="transition-opacity duration-500 animate-fadeIn opacity-100"
+            >
+              {lastMessage}
+            </p>
+          </div>
+        )}
+
+        {/* Resumen de respuestas cuando la llamada finaliza */}
+        {callStatus === CallStatus.FINISHED && (
+          <div className="mt-6 p-4 bg-blue-50 rounded-lg">
+            <h4 className="font-semibold mb-3">Resumen de la conversación:</h4>
+            <div className="space-y-2">
+              <p><strong>Tipo de agente:</strong> {responses.agentType}</p>
+              <p><strong>Integraciones:</strong> {responses.integrations}</p>
+              <p><strong>Horario preferido:</strong> {responses.preferredCallTime}</p>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 } 

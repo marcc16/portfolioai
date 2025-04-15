@@ -7,9 +7,7 @@ let exemptIPs: string[] = ['127.0.0.1'];
 const ADMIN_PASSWORD = 'tu-contraseña-secreta';
 
 // Obtener las IPs exentas
-async function getExemptIPs(): Promise<string[]> {
-  return exemptIPs;
-}
+
 
 // Guardar las IPs exentas
 async function saveExemptIPs(ips: string[]): Promise<void> {
