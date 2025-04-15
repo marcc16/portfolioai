@@ -15,8 +15,8 @@ export async function POST(request: Request) {
     // Formatear los datos para n8n
     const automationData = {
       email,
-      agentType: responses[0] || "",
-      integrations: responses[1] || "",
+      agentType: responses[0] || "",  // Primera respuesta después del "Sí, dime"
+      integrations: responses[1] || "", // Segunda respuesta
       timestamp: new Date().toISOString(),
       source: "portfolio_voice_demo"
     };

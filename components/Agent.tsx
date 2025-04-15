@@ -37,6 +37,7 @@ export function useAgent() {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [lastMessage, setLastMessage] = useState<string>("");
   const [userEmail, setUserEmail] = useState<string>("");
+  const [hasProcessedResponses, setHasProcessedResponses] = useState(false);
 
   // Función auxiliar para verificar si un error indica fin de llamada
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -47,11 +48,20 @@ export function useAgent() {
 
   // Función para procesar las respuestas y enviarlas al endpoint
   const processAndSendResponses = async (email: string) => {
+    // Evitar procesamiento duplicado
+    if (hasProcessedResponses) {
+      console.log('🚫 [Agent] Respuestas ya procesadas, ignorando llamada duplicada');
+      return;
+    }
+
     // Guardar el email para usarlo en el onCallEnd y onError
     setUserEmail(email);
     
     // Obtener las respuestas del usuario en orden
     const userMessages = messages.filter(msg => msg.role === "user");
+    
+    // Ignorar la primera respuesta ("Sí, dime") y tomar las siguientes dos
+    const relevantResponses = userMessages.slice(1, 3);
 
     try {
       const response = await fetch('/api/portfolio-data', {
@@ -61,8 +71,8 @@ export function useAgent() {
         },
         body: JSON.stringify({
           responses: [
-            userMessages[0]?.content || "",
-            userMessages[1]?.content || ""
+            relevantResponses[0]?.content || "",
+            relevantResponses[1]?.content || ""
           ],
           email: email
         }),
@@ -73,6 +83,7 @@ export function useAgent() {
       }
 
       console.log('✅ [Agent] Respuestas enviadas exitosamente');
+      setHasProcessedResponses(true);
     } catch (error) {
       console.error('❌ [Agent] Error enviando respuestas:', error);
     }
@@ -86,6 +97,7 @@ export function useAgent() {
     const onCallStart = () => {
       console.log('🟢 [VAPI] Llamada iniciada');
       setCallStatus(CallStatus.ACTIVE);
+      setHasProcessedResponses(false); // Resetear el flag al iniciar nueva llamada
     };
 
     const onCallEnd = () => {
