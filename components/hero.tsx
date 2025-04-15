@@ -1,6 +1,6 @@
 'use client';
 import { ParticleCanvas } from "@/hooks/particle";
-import { motion, useScroll, useTransform } from "framer-motion";
+import { motion, useScroll, useTransform, AnimatePresence } from "framer-motion";
 import Image from "next/image";
 import { useState, useEffect, useCallback } from "react";
 import { FaMicrophone, FaPhoneSlash } from "react-icons/fa";
@@ -114,7 +114,9 @@ export default function Hero() {
         }
         
         return () => {
-            if (timer) clearInterval(timer);
+            if (timer) {
+                clearInterval(timer);
+            }
         };
     }, [isCallActive, timeLeft, startTime, agent.callStatus, handleCallEnd]);
 
@@ -258,7 +260,7 @@ export default function Hero() {
                             transition={{ duration: 0.8, delay: 1.7 }}
                             className="flex items-center gap-4"
                         >
-                            {!isCallActive ? (
+                            {!isCallActive && agent.callStatus !== "FINISHED" ? (
                                 <button
                                     onClick={handleCallStart}
                                     disabled={!isEmailValid}
@@ -271,7 +273,7 @@ export default function Hero() {
                                     <FaMicrophone className="text-lg" />
                                     Start Call
                                 </button>
-                            ) : (
+                            ) : isCallActive ? (
                                 <button
                                     onClick={handleHangupClick}
                                     className="flex items-center gap-2 px-6 py-3 rounded-full bg-red-600 hover:bg-red-700 text-white font-medium transition-colors"
@@ -279,12 +281,14 @@ export default function Hero() {
                                     <FaPhoneSlash className="text-lg" />
                                     End Call
                                 </button>
-                            )}
+                            ) : null}
                             
                             {/* Timer display */}
-                            <span className="text-white/80">
-                                Time left: {Math.floor(timeLeft / 60)}:{(timeLeft % 60).toString().padStart(2, '0')}
-                            </span>
+                            {(isCallActive || agent.callStatus === "FINISHED") && (
+                                <span className="text-white/80">
+                                    Time left: {Math.floor(timeLeft / 60)}:{(timeLeft % 60).toString().padStart(2, '0')}
+                                </span>
+                            )}
                         </motion.div>
 
                         {/* Error message */}
@@ -299,18 +303,119 @@ export default function Hero() {
                         )}
                     </motion.div>
 
-                    {/* Image/Animation content */}
+                    {/* AI Assistant Avatar */}
                     <motion.div
-                        style={{ y }}
-                        className="lg:w-1/2"
+                        initial={{ opacity: 0, x: 50 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ duration: 1, delay: 0.5, ease: "easeOut" }}
+                        className="lg:w-1/2 relative"
+                        style={{y}}
                     >
-                        <Image
-                            src="/hero-image.png"
-                            alt="AI Voice Agents"
-                            width={600}
-                            height={600}
-                            className="w-full h-auto"
-                        />
+                        <div className="relative w-full aspect-square group">
+                            {/* Avatar Container */}
+                            <motion.div
+                                animate={isCallActive && agent.callStatus === "ACTIVE" ? 
+                                    { scale: [1, 1.02, 1], transition: { duration: 2, repeat: Infinity }} : 
+                                    { y: [0, -20, 0], transition: { duration: 6, repeat: Infinity, ease: "easeInOut" }}
+                                }
+                                className="relative w-full aspect-square rounded-full overflow-hidden
+                                border border-white/10 bg-surface/30 backdrop-blur-sm"
+                            >
+                                <div className="relative w-full h-full">
+                                    <Image
+                                        src="/portfolio.jpg"
+                                        alt="Portfolio"
+                                        fill
+                                        sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+                                        className="object-cover"
+                                        priority
+                                    />
+                                </div>
+                            </motion.div>
+
+                            {/* Overlay para elementos de la llamada */}
+                            <AnimatePresence>
+                                {isCallActive && agent.callStatus === "ACTIVE" && (
+                                    <motion.div
+                                        initial={{ opacity: 0 }}
+                                        animate={{ opacity: 1 }}
+                                        exit={{ opacity: 0 }}
+                                        className="absolute inset-0 flex flex-col justify-between p-8"
+                                    >
+                                        {/* Timer */}
+                                        <motion.div
+                                            initial={{ opacity: 0, y: -20 }}
+                                            animate={{ opacity: 1, y: 0 }}
+                                            exit={{ opacity: 0, y: -20 }}
+                                            className="mx-auto bg-black/80 backdrop-blur-sm px-6 py-3 rounded-full
+                                            text-white text-lg font-medium border border-white/20"
+                                        >
+                                            {Math.floor(timeLeft / 60)}:{(timeLeft % 60).toString().padStart(2, '0')}
+                                        </motion.div>
+                                        
+                                        {/* Botón de colgar */}
+                                        <motion.button
+                                            initial={{ opacity: 0, y: 20 }}
+                                            animate={{ opacity: 1, y: 0 }}
+                                            exit={{ opacity: 0, y: 20 }}
+                                            onClick={handleHangupClick}
+                                            className="mx-auto bg-red-500 hover:bg-red-600 p-4 rounded-full
+                                            transition-colors w-16 h-16 flex items-center justify-center
+                                            rotate-[135deg] shadow-lg hover:shadow-red-500/20 cursor-pointer
+                                            z-50"
+                                        >
+                                            <FaPhoneSlash className="w-8 h-8 text-white" />
+                                        </motion.button>
+                                    </motion.div>
+                                )}
+                            </AnimatePresence>
+
+                            {/* Ondas de voz animadas */}
+                            <AnimatePresence>
+                                {isCallActive && agent.callStatus === "ACTIVE" && (
+                                    <motion.div
+                                        initial={{ scale: 0.8, opacity: 0 }}
+                                        animate={{ scale: 1, opacity: 1 }}
+                                        exit={{ scale: 0.8, opacity: 0 }}
+                                        className="absolute inset-0 rounded-full"
+                                    >
+                                        {[...Array(3)].map((_, i) => (
+                                            <motion.div
+                                                key={i}
+                                                className={`absolute inset-0 rounded-full border-2 ${
+                                                    i % 3 === 0 
+                                                        ? "border-primary/70" 
+                                                        : i % 3 === 1 
+                                                            ? "border-secondary/70" 
+                                                            : "border-tertiary/70"
+                                                }`}
+                                                style={{
+                                                    boxShadow: i % 3 === 0 
+                                                        ? "0 0 8px rgba(94, 114, 235, 0.3)" 
+                                                        : i % 3 === 1 
+                                                            ? "0 0 8px rgba(255, 89, 158, 0.3)" 
+                                                            : "0 0 8px rgba(192, 97, 255, 0.3)"
+                                                }}
+                                                animate={{
+                                                    scale: [1, 1.1 + (i * 0.08), 1],
+                                                    opacity: [0.6, 0.3, 0.6],
+                                                }}
+                                                transition={{
+                                                    duration: 1.8 - (i * 0.2),
+                                                    delay: i * 0.25,
+                                                    repeat: Infinity,
+                                                    ease: "easeInOut"
+                                                }}
+                                            />
+                                        ))}
+                                    </motion.div>
+                                )}
+                            </AnimatePresence>
+
+                            {/* Sombra degradada */}
+                            <div className="absolute inset-0 rounded-full blur-2xl bg-gradient-to-r 
+                            from-primary/30 via-secondary/30 to-tertiary/30 opacity-70" />
+                        </div>
                     </motion.div>
                 </div>
             </div>
