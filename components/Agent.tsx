@@ -36,6 +36,7 @@ export function useAgent() {
   const [messages, setMessages] = useState<SavedMessage[]>([]);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [lastMessage, setLastMessage] = useState<string>("");
+  const [userEmail, setUserEmail] = useState<string>("");
 
   // Función auxiliar para verificar si un error indica fin de llamada
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -45,7 +46,10 @@ export function useAgent() {
   };
 
   // Función para procesar las respuestas y enviarlas al endpoint
-  const processAndSendResponses = async (userEmail: string) => {
+  const processAndSendResponses = async (email: string) => {
+    // Guardar el email para usarlo en el onCallEnd y onError
+    setUserEmail(email);
+    
     // Obtener las respuestas del usuario en orden
     const userMessages = messages.filter(msg => msg.role === "user");
 
@@ -61,7 +65,7 @@ export function useAgent() {
             userMessages[1]?.content || "",
             userMessages[2]?.content || ""
           ],
-          email: userEmail
+          email: email
         }),
       });
 
@@ -89,6 +93,11 @@ export function useAgent() {
       console.log('🔴 [VAPI] Llamada finalizada');
       console.log('📝 [VAPI] Mensajes acumulados:', messages);
       setCallStatus(CallStatus.FINISHED);
+      
+      // Procesar y enviar respuestas cuando VAPI termina la llamada
+      if (userEmail) {
+        processAndSendResponses(userEmail);
+      }
     };
 
     const onMessage = (message: Message) => {
@@ -113,11 +122,16 @@ export function useAgent() {
     const onError = (error: Error | unknown) => {
       console.error('❌ [VAPI] Error:', error);
       
-      // Si el error indica fin de llamada, actualizamos el estado
+      // Si el error indica fin de llamada, actualizamos el estado y procesamos respuestas
       if (isCallEndError(error)) {
         console.log('🔄 [VAPI] Error de fin de llamada detectado, actualizando estado');
         setCallStatus(CallStatus.FINISHED);
         setIsSpeaking(false);
+        
+        // Procesar y enviar respuestas cuando VAPI termina con error esperado
+        if (userEmail) {
+          processAndSendResponses(userEmail);
+        }
       }
     };
 
@@ -140,7 +154,7 @@ export function useAgent() {
       vapiInstance.off("speech-end", onSpeechEnd);
       vapiInstance.off("error", onError);
     };
-  }, [messages]);
+  }, [messages, userEmail]);
 
   // Función para iniciar la llamada
   const handleCall = async () => {
