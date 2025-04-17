@@ -7,7 +7,7 @@ import Script from "next/script";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Portify - AI Voice Assistant",
+  title: "Marc Bau Portfolio",
   description: "AI Voice Assistant for your business",
 };
 
