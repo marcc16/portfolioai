@@ -1,0 +1,3 @@
+[33me27c063[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m fix: cambiada URL del webhook
+[33m9bab3b1[m fix: restaurada imagen y animaciones, corregido comportamiento al terminar llamada
+[33m242ad02[m fix: corregidos errores de JSX y eliminada importación no utilizada
