@@ -38,9 +38,9 @@ export function useAgent() {
   const [lastMessage, setLastMessage] = useState<string>("");
   const [userEmail, setUserEmail] = useState<string>("");
   const [hasProcessedResponses, setHasProcessedResponses] = useState(false);
+  const [isProcessingResponses, setIsProcessingResponses] = useState(false);
 
   // Función auxiliar para verificar si un error indica fin de llamada
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const isCallEndError = (error: any): boolean => {
     const errorMsg = error?.errorMsg || error?.message || error?.toString();
     return CALL_END_ERRORS.some(msg => errorMsg.includes(msg));
@@ -48,22 +48,25 @@ export function useAgent() {
 
   // Función para procesar las respuestas y enviarlas al endpoint
   const processAndSendResponses = async (email: string) => {
-    // Evitar procesamiento duplicado
-    if (hasProcessedResponses) {
-      console.log('🚫 [Agent] Respuestas ya procesadas, ignorando llamada duplicada');
+    // Evitar procesamiento duplicado y procesamiento simultáneo
+    if (hasProcessedResponses || isProcessingResponses) {
+      console.log('🚫 [Agent] Respuestas ya procesadas o en proceso, ignorando llamada');
       return;
     }
 
-    // Guardar el email para usarlo en el onCallEnd y onError
-    setUserEmail(email);
-    
-    // Obtener las respuestas del usuario en orden
-    const userMessages = messages.filter(msg => msg.role === "user");
-    
-    // Ignorar la primera respuesta ("Sí, dime") y tomar las siguientes dos
-    const relevantResponses = userMessages.slice(1, 3);
-
     try {
+      setIsProcessingResponses(true);
+      
+      // Guardar el email para usarlo en el onCallEnd y onError
+      setUserEmail(email);
+      
+      // Obtener las respuestas del usuario en orden
+      const userMessages = messages.filter(msg => msg.role === "user");
+      
+      // Ignorar la primera respuesta ("Sí, dime") y tomar las siguientes dos
+      const relevantResponses = userMessages.slice(1, 3);
+
+      // Enviar las respuestas
       const response = await fetch('/api/portfolio-data', {
         method: 'POST',
         headers: {
@@ -86,6 +89,8 @@ export function useAgent() {
       setHasProcessedResponses(true);
     } catch (error) {
       console.error('❌ [Agent] Error enviando respuestas:', error);
+    } finally {
+      setIsProcessingResponses(false);
     }
   };
 
@@ -97,7 +102,8 @@ export function useAgent() {
     const onCallStart = () => {
       console.log('🟢 [VAPI] Llamada iniciada');
       setCallStatus(CallStatus.ACTIVE);
-      setHasProcessedResponses(false); // Resetear el flag al iniciar nueva llamada
+      setHasProcessedResponses(false);
+      setIsProcessingResponses(false);
     };
 
     const onCallEnd = () => {
@@ -105,8 +111,8 @@ export function useAgent() {
       console.log('📝 [VAPI] Mensajes acumulados:', messages);
       setCallStatus(CallStatus.FINISHED);
       
-      // Procesar y enviar respuestas cuando VAPI termina la llamada
-      if (userEmail) {
+      // Procesar y enviar respuestas solo cuando VAPI termina la llamada normalmente
+      if (userEmail && !hasProcessedResponses && !isProcessingResponses) {
         processAndSendResponses(userEmail);
       }
     };
@@ -139,8 +145,8 @@ export function useAgent() {
         setCallStatus(CallStatus.FINISHED);
         setIsSpeaking(false);
         
-        // Procesar y enviar respuestas cuando VAPI termina con error esperado
-        if (userEmail) {
+        // Procesar y enviar respuestas solo cuando la llamada termina por error esperado
+        if (userEmail && !hasProcessedResponses && !isProcessingResponses) {
           processAndSendResponses(userEmail);
         }
       }
