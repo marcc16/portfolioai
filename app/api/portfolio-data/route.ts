@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 
-const N8N_WEBHOOK_URL = 'https://n8n-n8n.7ywuv8.easypanel.host/webhook/c3a5be07-5c90-425b-973b-f45411238fad';
+const N8N_WEBHOOK_URL = 'https://n8n-n8n.7ywuv8.easypanel.host/webhook-test/c3a5be07-5c90-425b-973b-f45411238fad';
 
 export async function POST(request: Request) {
   console.log('🔵 [API] POST /api/portfolio-data - Recibida nueva solicitud');
