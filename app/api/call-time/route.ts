@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 // In-memory storage for user time tracking
 const userTimeUsed: { [key: string]: number } = {};
-const MAX_TIME_PER_USER = 3600; // 1 hour in seconds
+const MAX_TIME_PER_USER = 60; // 1 hour in seconds
 
 // Get remaining time for a user
 async function getUserRemainingTime(ip: string): Promise<number> {
