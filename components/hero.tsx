@@ -30,48 +30,11 @@ export default function Hero() {
     // Usar el hook de agente sin email
     const agent = useAgent();
 
-    // Iniciar la llamada
-    const startCall = useCallback(async () => {
-        try {
-            console.log('🎯 Intentando iniciar llamada. Email válido:', isEmailValid, 'Llamada disponible:', hasCallAvailable);
-            
-            if (!isEmailValid || !hasCallAvailable) {
-                console.error('❌ No se puede iniciar la llamada - Email válido:', isEmailValid, 'Llamada disponible:', hasCallAvailable);
-                return;
-            }
-
-            // Registrar la llamada primero
-            const response = await fetch('/api/call-time', {
-                method: 'POST'
-            });
-            const data = await response.json();
-            
-            if (!data.success) {
-                console.error('❌ Error registrando la llamada:', data);
-                setError(data.message || 'Failed to register call');
-                return;
-            }
-            
-            console.log('✅ Llamada registrada exitosamente:', data);
-            setHasCallAvailable(data.hasCallAvailable);
-
-            // Iniciar la llamada con VAPI
-            console.log('🎤 Iniciando llamada con VAPI...');
-            await agent.startCall();
-            setIsCallActive(true);
-            setError(null);
-        } catch (err) {
-            console.error('❌ Error iniciando la llamada:', err);
-            setError('Failed to start call');
-            setIsCallActive(false);
-        }
-    }, [agent, isEmailValid, hasCallAvailable]);
-
     // Finalizar la llamada
     const handleCallEnd = useCallback(async () => {
         try {
             console.log('🔄 Finalizando llamada...');
-            await agent.endCall();
+            agent.handleDisconnect();
             setIsCallActive(false);
             setTimerStarted(false);
             setTimeRemaining(60);
@@ -174,21 +137,6 @@ export default function Hero() {
         }
     };
 
-    // Registrar el uso de la llamada
-    const registerCall = useCallback(async () => {
-        try {
-            const response = await fetch('/api/call-time', {
-                method: 'POST'
-            });
-            const data = await response.json();
-            setHasCallAvailable(data.hasCallAvailable);
-            return data.success;
-            } catch (err) {
-            console.error("❌ Error registering call:", err);
-            return false;
-        }
-    }, []);
-
     // Formatear el tiempo restante
     const formatTime = (seconds: number): string => {
         const mins = Math.floor(seconds / 60);
@@ -218,25 +166,37 @@ export default function Hero() {
         try {
             console.log('🎯 Intentando iniciar llamada. Email válido:', isEmailValid, 'Llamada disponible:', hasCallAvailable);
             
-            // Primero intentamos iniciar la llamada con VAPI
+            // Primero registramos el uso de la llamada
+            const response = await fetch('/api/call-time', {
+                method: 'POST'
+            });
+            const data = await response.json();
+            
+            if (!data.success) {
+                console.error('❌ Error registrando la llamada:', data);
+                setError(data.message || 'Failed to register call');
+                return;
+            }
+            
+            console.log('✅ Llamada registrada exitosamente:', data);
+            setHasCallAvailable(data.hasCallAvailable);
+
+            // Luego iniciamos la llamada con VAPI
+            console.log('🎤 Iniciando llamada con VAPI...');
             setIsCallActive(true);
             setError(null);
-            setTimerStarted(false); // Asegurarnos de que el timer esté reseteado
             await agent.handleCall();
 
-            // Solo si la llamada se inició correctamente, registramos el uso
-            const success = await registerCall();
-            if (!success) {
-                setError("Failed to register call.");
+            // Si hay error al iniciar la llamada, revertimos el estado
+            if (agent.callStatus !== "ACTIVE") {
+                setError("Failed to start call with AI assistant");
                 setIsCallActive(false);
-                agent.handleDisconnect();
                 return;
             }
 
-            // Actualizar estado de disponibilidad
-            await checkCallAvailability();
+            console.log('✅ Llamada iniciada correctamente');
         } catch (err) {
-            console.error("Error starting call:", err);
+            console.error('❌ Error iniciando la llamada:', err);
             setError(err instanceof Error ? err.message : "Failed to start call");
             setIsCallActive(false);
         }
