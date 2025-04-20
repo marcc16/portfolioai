@@ -91,6 +91,7 @@ export async function getRemainingCalls(userId: string): Promise<number> {
 
     // Para probar rate limiting, podemos usar esta variable de entorno
     const testRateLimiting = process.env.TEST_RATE_LIMITING === 'true';
+    console.log('🔧 Test rate limiting:', testRateLimiting);
     
     // Admin users always have calls available unless we're testing rate limiting
     if (userId === 'admin-unlimited' && !testRateLimiting) {
@@ -136,19 +137,17 @@ export async function registerCall(userId: string): Promise<boolean> {
       return false;
     }
     
-    // Usar una transacción de Redis para evitar condiciones de carrera
-    const result = await redis.multi()
-      .get(key)
-      .set(key, (curr: number) => (curr || 0) + 1)
-      .exec();
+    // Obtener el número actual de llamadas
+    const currentCalls = await redis.get<number>(key) || 0;
+    console.log('📊 Llamadas actuales:', currentCalls);
     
-    console.log('✅ Resultado del registro:', result);
+    // Incrementar el contador de llamadas
+    const newCalls = currentCalls + 1;
+    console.log('📊 Nuevo contador de llamadas:', newCalls);
     
-    // Verificar que la transacción fue exitosa
-    if (!result || result.length !== 2) {
-      console.error('❌ Error en la transacción de Redis:', result);
-      return false;
-    }
+    // Guardar el nuevo valor
+    await redis.set(key, newCalls);
+    console.log('✅ Contador actualizado correctamente');
     
     return true;
   } catch (error) {
