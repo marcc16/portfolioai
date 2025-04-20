@@ -1,22 +1,46 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { redis } from '@/lib/upstash';
 
-// In-memory storage for exempt IPs
-let exemptIPs: string[] = ['127.0.0.1'];
+const EXEMPT_IPS_KEY = 'portfolio:exempt_ips';
 
-// Contraseña para administrar las IPs exentas (¡cámbiala!)
-const ADMIN_PASSWORD = 'tu-contraseña-secreta';
+// Obtener la contraseña de administrador desde las variables de entorno
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
 
-// Obtener las IPs exentas
+if (!ADMIN_PASSWORD) {
+  console.error('⚠️ ADMIN_PASSWORD environment variable is not set');
+}
 
+// Obtener las IPs exentas de Redis
+async function getExemptIPs(): Promise<string[]> {
+  try {
+    const ips = await redis.get<string[]>(EXEMPT_IPS_KEY);
+    return ips || ['127.0.0.1'];
+  } catch (error) {
+    console.error('Error getting exempt IPs:', error);
+    return ['127.0.0.1'];
+  }
+}
 
-// Guardar las IPs exentas
+// Guardar las IPs exentas en Redis
 async function saveExemptIPs(ips: string[]): Promise<void> {
-  exemptIPs = ips;
+  try {
+    await redis.set(EXEMPT_IPS_KEY, ips);
+  } catch (error) {
+    console.error('Error saving exempt IPs:', error);
+  }
 }
 
 // GET: Obtener la lista de IPs exentas
 export async function GET(request: NextRequest) {
   const password = request.headers.get('x-admin-password');
+  
+  // Verificar que la contraseña está configurada
+  if (!ADMIN_PASSWORD) {
+    return NextResponse.json(
+      { error: 'Admin password not configured on server' },
+      { status: 500 }
+    );
+  }
   
   // Verificar la contraseña
   if (password !== ADMIN_PASSWORD) {
@@ -26,6 +50,7 @@ export async function GET(request: NextRequest) {
     );
   }
   
+  const exemptIPs = await getExemptIPs();
   return NextResponse.json({ exemptIPs });
 }
 
@@ -33,6 +58,14 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const password = request.headers.get('x-admin-password');
+    
+    // Verificar que la contraseña está configurada
+    if (!ADMIN_PASSWORD) {
+      return NextResponse.json(
+        { error: 'Admin password not configured on server' },
+        { status: 500 }
+      );
+    }
     
     // Verificar la contraseña
     if (password !== ADMIN_PASSWORD) {
@@ -51,6 +84,9 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
+    
+    // Obtener IPs actuales
+    const exemptIPs = await getExemptIPs();
     
     // Comprobar si la IP ya está exenta
     if (exemptIPs.includes(ip)) {
@@ -82,6 +118,14 @@ export async function DELETE(request: NextRequest) {
   try {
     const password = request.headers.get('x-admin-password');
     
+    // Verificar que la contraseña está configurada
+    if (!ADMIN_PASSWORD) {
+      return NextResponse.json(
+        { error: 'Admin password not configured on server' },
+        { status: 500 }
+      );
+    }
+    
     // Verificar la contraseña
     if (password !== ADMIN_PASSWORD) {
       return NextResponse.json(
@@ -99,6 +143,9 @@ export async function DELETE(request: NextRequest) {
         { status: 400 }
       );
     }
+    
+    // Obtener IPs actuales
+    const exemptIPs = await getExemptIPs();
     
     // Filtrar la IP a eliminar
     const updatedIPs = exemptIPs.filter(exemptIP => exemptIP !== ip);

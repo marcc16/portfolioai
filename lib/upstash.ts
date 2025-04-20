@@ -10,6 +10,25 @@ export const redis = new Redis({
 // Key prefix for Redis to avoid conflicts
 const KEY_PREFIX = 'portfolio:calls:'
 
+// Lista de IPs exentas (se cargará desde Redis)
+let exemptIPs: string[] = ['127.0.0.1'];
+
+// Cargar IPs exentas desde Redis
+async function loadExemptIPs() {
+  try {
+    const ips = await redis.get<string[]>('portfolio:exempt_ips');
+    if (ips) {
+      exemptIPs = ips;
+    }
+  } catch (error) {
+    console.error('Error loading exempt IPs:', error);
+  }
+}
+
+// Recargar IPs exentas cada 5 minutos
+setInterval(loadExemptIPs, 5 * 60 * 1000);
+loadExemptIPs(); // Cargar al inicio
+
 // Get unique user identifier from request
 export function getUserId(request: NextRequest): string {
   // Get all possible identifiers
@@ -17,6 +36,11 @@ export function getUserId(request: NextRequest): string {
   const realIp = request.headers.get('x-real-ip')
   const cfConnectingIp = request.headers.get('cf-connecting-ip')
   const ip = forwardedFor?.split(',')[0] || cfConnectingIp || realIp || '127.0.0.1'
+  
+  // Check if IP is exempt
+  if (exemptIPs.includes(ip)) {
+    return 'admin-unlimited';
+  }
   
   // Get user agent and other browser fingerprinting data
   const userAgent = request.headers.get('user-agent') || ''
@@ -38,6 +62,11 @@ export async function getRemainingCalls(userId: string): Promise<number> {
     // Always check rate limiting in production
     if (process.env.NODE_ENV !== 'production' && process.env.ENABLE_RATE_LIMITING !== 'true') {
       return MAX_CALLS
+    }
+
+    // Admin users always have calls available
+    if (userId === 'admin-unlimited') {
+      return MAX_CALLS;
     }
 
     const key = `${KEY_PREFIX}${userId}`

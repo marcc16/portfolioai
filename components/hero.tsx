@@ -25,6 +25,7 @@ export default function Hero() {
     const [hasCallAvailable, setHasCallAvailable] = useState<boolean>(true);
     const [timeRemaining, setTimeRemaining] = useState<number>(60);
     const [timerStarted, setTimerStarted] = useState(false);
+    const [isAdmin, setIsAdmin] = useState(false);
     
     // Usar el hook de agente sin email
     const agent = useAgent();
@@ -101,11 +102,14 @@ export default function Hero() {
     const checkCallAvailability = useCallback(async () => {
         try {
             const response = await fetch('/api/call-time');
-                const data = await response.json();
+            const data = await response.json();
             setHasCallAvailable(data.hasCallAvailable);
+            // Si el usuario es admin (tiene llamadas ilimitadas), actualizamos el estado
+            setIsAdmin(data.remainingCalls === 1 && data.hasCallAvailable);
         } catch (err) {
             console.error("❌ Error checking call availability:", err);
             setHasCallAvailable(false);
+            setIsAdmin(false);
         }
     }, []);
 
@@ -307,13 +311,17 @@ export default function Hero() {
                             {/* Remaining calls info */}
                             <div className="text-white/60 text-sm flex items-center gap-2">
                                 
-                                {/* Reset button - solo en desarrollo */}
-                                {process.env.NODE_ENV === 'development' && (
+                                {/* Reset button - solo para admins */}
+                                {isAdmin && (
                                     <button
                                         onClick={async () => {
                                             try {
                                                 const response = await fetch('/api/reset-calls', {
-                                                    method: 'POST'
+                                                    method: 'POST',
+                                                    headers: {
+                                                        'Content-Type': 'application/json'
+                                                    },
+                                                    body: JSON.stringify({}) // No necesitamos targetUserId, usará el del admin
                                                 });
                                                 const data = await response.json();
                                                 if (data.success) {
@@ -328,7 +336,7 @@ export default function Hero() {
                                         className="ml-4 px-2 py-1 text-xs bg-yellow-500 hover:bg-yellow-600 
                                         text-black rounded transition-colors"
                                     >
-                                        Reset Call (Dev)
+                                        Reset Call
                                     </button>
                                 )}
                             </div>
