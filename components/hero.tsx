@@ -22,7 +22,7 @@ export default function Hero() {
     const [error, setError] = useState<string | null>(null);
     const [email, setEmail] = useState('');
     const [isEmailValid, setIsEmailValid] = useState(false);
-    const [hasCallAvailable, setHasCallAvailable] = useState<boolean>(true);
+    const [hasCallAvailable, setHasCallAvailable] = useState(false);
     const [timeRemaining, setTimeRemaining] = useState<number>(60);
     const [timerStarted, setTimerStarted] = useState(false);
     const [isAdmin, setIsAdmin] = useState(false);
@@ -30,26 +30,58 @@ export default function Hero() {
     // Usar el hook de agente sin email
     const agent = useAgent();
 
-    const handleCallEnd = useCallback(async () => {
-        if (!agent) {
-            setError("Voice assistant not initialized. Please refresh the page.");
-            return;
-        }
-        
+    // Iniciar la llamada
+    const startCall = useCallback(async () => {
         try {
-            console.log('📞 Finalizando llamada...');
-            agent.handleDisconnect();
+            console.log('🎯 Intentando iniciar llamada. Email válido:', isEmailValid, 'Llamada disponible:', hasCallAvailable);
+            
+            if (!isEmailValid || !hasCallAvailable) {
+                console.error('❌ No se puede iniciar la llamada - Email válido:', isEmailValid, 'Llamada disponible:', hasCallAvailable);
+                return;
+            }
+
+            // Registrar la llamada primero
+            const response = await fetch('/api/call-time', {
+                method: 'POST'
+            });
+            const data = await response.json();
+            
+            if (!data.success) {
+                console.error('❌ Error registrando la llamada:', data);
+                setError(data.message || 'Failed to register call');
+                return;
+            }
+            
+            console.log('✅ Llamada registrada exitosamente:', data);
+            setHasCallAvailable(data.hasCallAvailable);
+
+            // Iniciar la llamada con VAPI
+            console.log('🎤 Iniciando llamada con VAPI...');
+            await agent.startCall();
+            setIsCallActive(true);
             setError(null);
+        } catch (err) {
+            console.error('❌ Error iniciando la llamada:', err);
+            setError('Failed to start call');
+            setIsCallActive(false);
+        }
+    }, [agent, isEmailValid, hasCallAvailable]);
+
+    // Finalizar la llamada
+    const handleCallEnd = useCallback(async () => {
+        try {
+            console.log('🔄 Finalizando llamada...');
+            await agent.endCall();
             setIsCallActive(false);
             setTimerStarted(false);
-            
-            // Procesar y enviar respuestas con el email
-            await agent.processAndSendResponses(email);
+            setTimeRemaining(60);
+            console.log('✅ Llamada finalizada correctamente');
         } catch (err) {
-            console.error("❌ Error ending call:", err);
-            setError(err instanceof Error ? err.message : "Failed to end call");
+            console.error('❌ Error finalizando la llamada:', err);
+            setError('Failed to end call');
+            setIsCallActive(false);
         }
-    }, [agent, email]);
+    }, [agent]);
 
     // Manejar la cuenta atrás
     useEffect(() => {
@@ -103,9 +135,18 @@ export default function Hero() {
         try {
             const response = await fetch('/api/call-time');
             const data = await response.json();
+            
+            if (!data.success) {
+                console.error('❌ Error checking call availability:', data.error);
+                setHasCallAvailable(false);
+                setIsAdmin(false);
+                return;
+            }
+            
             setHasCallAvailable(data.hasCallAvailable);
-            // Si el usuario es admin (tiene llamadas ilimitadas), actualizamos el estado
-            setIsAdmin(data.remainingCalls === 1 && data.hasCallAvailable);
+            // Solo establecer isAdmin si el servidor confirma que el usuario es admin
+            setIsAdmin(data.isAdmin === true);
+            console.log('👤 Estado de admin:', data.isAdmin);
         } catch (err) {
             console.error("❌ Error checking call availability:", err);
             setHasCallAvailable(false);
@@ -311,7 +352,7 @@ export default function Hero() {
                             {/* Remaining calls info */}
                             <div className="text-white/60 text-sm flex items-center gap-2">
                                 
-                                {/* Reset button - solo para admins */}
+                                {/* Reset button - solo para admins confirmados por el servidor */}
                                 {isAdmin && (
                                     <button
                                         onClick={async () => {
@@ -324,12 +365,17 @@ export default function Hero() {
                                                     body: JSON.stringify({}) // No necesitamos targetUserId, usará el del admin
                                                 });
                                                 const data = await response.json();
-                                                if (data.success) {
-                                                    await checkCallAvailability();
-                                                    setError(null);
+                                                
+                                                if (!data.success) {
+                                                    console.error('❌ Error resetting calls:', data.error);
+                                                    setError('Failed to reset calls: ' + (data.message || 'Unknown error'));
+                                                    return;
                                                 }
+                                                
+                                                await checkCallAvailability();
+                                                setError(null);
                                             } catch (err) {
-                                                console.error('Error resetting call:', err);
+                                                console.error('❌ Error resetting call:', err);
                                                 setError('Failed to reset call');
                                             }
                                         }}

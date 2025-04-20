@@ -112,17 +112,25 @@ export async function registerCall(userId: string): Promise<boolean> {
       return true
     }
 
+    // Admin users don't consume calls
+    if (userId === 'admin-unlimited') {
+      console.log('✨ Admin user detected, skipping call registration');
+      return true;
+    }
+
     const key = `${KEY_PREFIX}${userId}`
+    console.log('📝 Registrando llamada para:', key);
     
     // Usar una transacción de Redis para evitar condiciones de carrera
-    return await redis.multi()
+    const result = await redis.multi()
       .get(key)
       .set(key, (curr: number) => (curr || 0) + 1)
-      .exec()
-      .then(() => true)
-      .catch(() => false)
+      .exec();
+    
+    console.log('✅ Resultado del registro:', result);
+    return true;
   } catch (error) {
-    console.error('Error registering call:', error)
+    console.error('❌ Error registering call:', error)
     return false
   }
 } 
