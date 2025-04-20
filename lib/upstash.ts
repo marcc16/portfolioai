@@ -86,21 +86,25 @@ export async function getRemainingCalls(userId: string): Promise<number> {
   try {
     // Always check rate limiting in production
     if (process.env.NODE_ENV !== 'production' && process.env.ENABLE_RATE_LIMITING !== 'true') {
-      return MAX_CALLS
-    }
-
-    // Admin users always have calls available
-    if (userId === 'admin-unlimited') {
       return MAX_CALLS;
     }
 
-    const key = `${KEY_PREFIX}${userId}`
-    const usedCalls = await redis.get<number>(key) || 0
-    return Math.max(0, MAX_CALLS - usedCalls)
+    // Para probar rate limiting, podemos usar esta variable de entorno
+    const testRateLimiting = process.env.TEST_RATE_LIMITING === 'true';
+    
+    // Admin users always have calls available unless we're testing rate limiting
+    if (userId === 'admin-unlimited' && !testRateLimiting) {
+      return MAX_CALLS;
+    }
+
+    const key = `${KEY_PREFIX}${userId}`;
+    const usedCalls = await redis.get<number>(key) || 0;
+    console.log('📊 Llamadas usadas:', usedCalls, 'para usuario:', userId);
+    return Math.max(0, MAX_CALLS - usedCalls);
   } catch (error) {
-    console.error('Error getting remaining calls:', error)
+    console.error('❌ Error getting remaining calls:', error);
     // En caso de error, asumimos que no hay llamadas disponibles por seguridad
-    return 0
+    return 0;
   }
 }
 
@@ -109,11 +113,12 @@ export async function registerCall(userId: string): Promise<boolean> {
   try {
     // Always check rate limiting in production
     if (process.env.NODE_ENV !== 'production' && process.env.ENABLE_RATE_LIMITING !== 'true') {
-      return true
+      return true;
     }
 
     // Para probar rate limiting, podemos usar esta variable de entorno
     const testRateLimiting = process.env.TEST_RATE_LIMITING === 'true';
+    console.log('🔧 Test rate limiting:', testRateLimiting);
     
     // Admin users don't consume calls unless we're testing rate limiting
     if (userId === 'admin-unlimited' && !testRateLimiting) {
@@ -121,8 +126,15 @@ export async function registerCall(userId: string): Promise<boolean> {
       return true;
     }
 
-    const key = `${KEY_PREFIX}${userId}`
+    const key = `${KEY_PREFIX}${userId}`;
     console.log('📝 Registrando llamada para:', key);
+    
+    // Verificar llamadas restantes antes de registrar
+    const remainingCalls = await getRemainingCalls(userId);
+    if (remainingCalls <= 0) {
+      console.log('❌ No hay llamadas disponibles para:', userId);
+      return false;
+    }
     
     // Usar una transacción de Redis para evitar condiciones de carrera
     const result = await redis.multi()
@@ -131,9 +143,16 @@ export async function registerCall(userId: string): Promise<boolean> {
       .exec();
     
     console.log('✅ Resultado del registro:', result);
+    
+    // Verificar que la transacción fue exitosa
+    if (!result || result.length !== 2) {
+      console.error('❌ Error en la transacción de Redis:', result);
+      return false;
+    }
+    
     return true;
   } catch (error) {
-    console.error('❌ Error registering call:', error)
-    return false
+    console.error('❌ Error registering call:', error);
+    return false;
   }
 } 

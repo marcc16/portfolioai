@@ -64,7 +64,7 @@ export async function POST(request: NextRequest) {
                 remainingCalls,
                 hasCallAvailable: true,
                 isAdmin: userId === 'admin-unlimited'
-            });
+            }, { status: 500 });
         }
 
         // Obtener el número actualizado de llamadas restantes
