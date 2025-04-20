@@ -1,21 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getUserId, hasUsedCall, registerCallUsage } from '@/lib/upstash';
+import { getUserId, getRemainingCalls, registerCall } from '@/lib/upstash';
 
 export async function GET(request: NextRequest) {
     try {
         const userId = getUserId(request);
-        const hasUsed = await hasUsedCall(userId);
+        const remainingCalls = await getRemainingCalls(userId);
         
         return NextResponse.json({
             success: true,
-            hasCallAvailable: !hasUsed,
+            remainingCalls,
+            hasCallAvailable: remainingCalls > 0,
             userId,
             timestamp: new Date().toISOString()
         });
     } catch (error) {
-        console.error('Error checking call availability:', error);
+        console.error('Error getting remaining calls:', error);
         return NextResponse.json(
-            { success: false, message: 'Failed to check call availability' },
+            { success: false, message: 'Failed to get remaining calls' },
             { status: 500 }
         );
     }
@@ -25,27 +26,35 @@ export async function POST(request: NextRequest) {
     try {
         const userId = getUserId(request);
         
-        // Verificar primero si ya usó su llamada
-        const hasUsed = await hasUsedCall(userId);
-        if (hasUsed) {
-            return NextResponse.json(
-                { success: false, message: 'Call already used', hasCallAvailable: false },
-                { status: 403 }
-            );
+        // Verificar primero si hay llamadas disponibles
+        const remainingCalls = await getRemainingCalls(userId);
+        if (remainingCalls <= 0) {
+            return NextResponse.json({
+                success: false,
+                message: 'No calls available',
+                remainingCalls: 0,
+                hasCallAvailable: false
+            });
         }
 
-        // Intentar registrar el uso
-        const success = await registerCallUsage(userId);
+        // Registrar la llamada
+        const success = await registerCall(userId);
         if (!success) {
-            return NextResponse.json(
-                { success: false, message: 'Failed to register call', hasCallAvailable: true },
-                { status: 500 }
-            );
+            return NextResponse.json({
+                success: false,
+                message: 'Failed to register call',
+                remainingCalls,
+                hasCallAvailable: true
+            });
         }
+
+        // Obtener el número actualizado de llamadas restantes
+        const updatedRemainingCalls = await getRemainingCalls(userId);
 
         return NextResponse.json({
             success: true,
-            hasCallAvailable: false,
+            remainingCalls: updatedRemainingCalls,
+            hasCallAvailable: updatedRemainingCalls > 0,
             userId,
             timestamp: new Date().toISOString()
         });

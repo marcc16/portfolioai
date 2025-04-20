@@ -23,10 +23,70 @@ export default function Hero() {
     const [email, setEmail] = useState('');
     const [isEmailValid, setIsEmailValid] = useState(false);
     const [hasCallAvailable, setHasCallAvailable] = useState<boolean>(true);
-    const [isLoading, setIsLoading] = useState(false);
+    const [timeRemaining, setTimeRemaining] = useState<number>(60);
+    const [timerStarted, setTimerStarted] = useState(false);
     
     // Usar el hook de agente sin email
     const agent = useAgent();
+
+    const handleCallEnd = useCallback(async () => {
+        if (!agent) {
+            setError("Voice assistant not initialized. Please refresh the page.");
+            return;
+        }
+        
+        try {
+            console.log('📞 Finalizando llamada...');
+            agent.handleDisconnect();
+            setError(null);
+            setIsCallActive(false);
+            setTimerStarted(false);
+            
+            // Procesar y enviar respuestas con el email
+            await agent.processAndSendResponses(email);
+        } catch (err) {
+            console.error("❌ Error ending call:", err);
+            setError(err instanceof Error ? err.message : "Failed to end call");
+        }
+    }, [agent, email]);
+
+    // Manejar la cuenta atrás
+    useEffect(() => {
+        let timer: NodeJS.Timeout;
+        let isActive = true;
+
+        // Solo iniciar el timer cuando la llamada se active y no se haya iniciado antes
+        if (isCallActive && agent.callStatus === "ACTIVE" && !timerStarted) {
+            setTimerStarted(true);
+            setTimeRemaining(60);
+        }
+
+        // Mantener el timer corriendo mientras la llamada esté activa
+        if (isCallActive && agent.callStatus === "ACTIVE" && timerStarted) {
+            timer = setInterval(() => {
+                setTimeRemaining(prev => {
+                    if (prev <= 1 && isActive) {
+                        handleCallEnd();
+                        return 0;
+                    }
+                    return prev - 1;
+                });
+            }, 1000);
+        }
+
+        // Resetear el timer cuando la llamada termine
+        if (!isCallActive || agent.callStatus !== "ACTIVE") {
+            setTimerStarted(false);
+            setTimeRemaining(60);
+        }
+
+        return () => {
+            isActive = false;
+            if (timer) {
+                clearInterval(timer);
+            }
+        };
+    }, [isCallActive, agent.callStatus, timerStarted, handleCallEnd]);
 
     // Cargar email del localStorage al montar el componente
     useEffect(() => {
@@ -41,128 +101,99 @@ export default function Hero() {
     const checkCallAvailability = useCallback(async () => {
         try {
             const response = await fetch('/api/call-time');
-            const data = await response.json();
-            
-            if (!data.success) {
-                console.error('Error checking call availability:', data.message);
-                setError('Error checking call availability');
-                return;
-            }
-            
-            console.log('📞 Estado de disponibilidad:', data);
+                const data = await response.json();
             setHasCallAvailable(data.hasCallAvailable);
         } catch (err) {
             console.error("❌ Error checking call availability:", err);
             setHasCallAvailable(false);
-            setError('Error checking call availability');
         }
     }, []);
 
-    // Verificar disponibilidad al cargar y después de cada llamada
+    // Verificar disponibilidad al cargar
     useEffect(() => {
         checkCallAvailability();
     }, [checkCallAvailability]);
 
-    const handleCallStart = async () => {
-        if (isLoading) return;
-        
-        setIsLoading(true);
-        
-        try {
-            // Verificamos disponibilidad
-            const checkResponse = await fetch('/api/check-call-availability', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ email }),
-            });
-
-            const { available } = await checkResponse.json();
-            
-            if (!available) {
-                console.log('❌ No hay llamadas disponibles');
-                setIsLoading(false);
-                return;
-            }
-
-            // Iniciamos la llamada
-            const startResponse = await fetch('/api/start-call', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ email }),
-            });
-
-            const data = await startResponse.json();
-            
-            if (data.error?.includes('workflow')) {
-                console.error('Error en la configuración del workflow:', data.error);
-                setIsLoading(false);
-                return;
-            }
-
-            console.log('✅ Llamada iniciada:', data);
-            
-            // Actualizamos el estado después de iniciar la llamada
-            checkCallAvailability();
-        } catch (error) {
-            console.error('Error starting call:', error);
-        } finally {
-            setIsLoading(false);
+    // Manejar cambios en el email
+    const handleEmailChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const newEmail = e.target.value;
+        console.log('📝 Cambio en el email:', newEmail);
+        setEmail(newEmail);
+        const isValid = validateEmail(newEmail);
+        console.log('✅ Email válido:', isValid);
+        setIsEmailValid(isValid);
+        if (isValid) {
+            // Guardar email válido en localStorage
+            localStorage.setItem('userEmail', newEmail);
+            console.log('💾 Email guardado en localStorage');
         }
     };
 
-    const handleCallEnd = useCallback(async () => {
+    // Registrar el uso de la llamada
+    const registerCall = useCallback(async () => {
+        try {
+            const response = await fetch('/api/call-time', {
+                method: 'POST'
+            });
+            const data = await response.json();
+            setHasCallAvailable(data.hasCallAvailable);
+            return data.success;
+            } catch (err) {
+            console.error("❌ Error registering call:", err);
+            return false;
+        }
+    }, []);
+
+    // Formatear el tiempo restante
+    const formatTime = (seconds: number): string => {
+        const mins = Math.floor(seconds / 60);
+        const secs = seconds % 60;
+        return `${mins}:${secs.toString().padStart(2, '0')}`;
+    };
+
+    const handleCallStart = async () => {
+        // Si no hay agente, mostrar error
         if (!agent) {
             setError("Voice assistant not initialized. Please refresh the page.");
             return;
         }
         
-        try {
-            console.log('📞 Finalizando llamada...');
-            agent.handleDisconnect();
-            setError(null);
-            setIsCallActive(false);
-            
-            // Procesar y enviar respuestas con el email
-            await agent.processAndSendResponses(email);
-            
-            // Verificar disponibilidad después de terminar la llamada
-            await checkCallAvailability();
-        } catch (err) {
-            console.error("❌ Error ending call:", err);
-            setError(err instanceof Error ? err.message : "Failed to end call");
-            // Verificar disponibilidad incluso si hay error
-            await checkCallAvailability();
+        // Validar email antes de iniciar
+        if (!isEmailValid) {
+            setError("Please enter a valid email address before starting the call.");
+            return;
         }
-    }, [agent, email, checkCallAvailability]);
 
-    // Manejador para el botón de reset
-    const resetCall = async () => {
-        if (process.env.NODE_ENV !== 'development') {
-            console.log('❌ Reset solo disponible en desarrollo');
+        // Verificar disponibilidad de llamada
+        if (!hasCallAvailable) {
+            setError("You have already used your call.");
             return;
         }
         
         try {
-            console.log('🔄 Reseteando llamada...');
-            const response = await fetch('/api/reset-calls', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ email }),
-            });
-
-            const data = await response.json();
-            console.log('✅ Llamada reseteada:', data);
+            console.log('🎯 Intentando iniciar llamada. Email válido:', isEmailValid, 'Llamada disponible:', hasCallAvailable);
             
-            // Actualizamos el estado después del reset
-            checkCallAvailability();
-        } catch (error) {
-            console.error('Error resetting call:', error);
+            // Primero intentamos iniciar la llamada con VAPI
+            setIsCallActive(true);
+            setError(null);
+            setTimerStarted(false); // Asegurarnos de que el timer esté reseteado
+            await agent.handleCall();
+
+            // Solo si la llamada se inició correctamente, registramos el uso
+            const success = await registerCall();
+            if (!success) {
+                setError("Failed to register call.");
+                setIsCallActive(false);
+                agent.handleDisconnect();
+                return;
+            }
+
+            // Actualizar estado de disponibilidad
+            await checkCallAvailability();
+        } catch (err) {
+            console.error("Error starting call:", err);
+            setError(err instanceof Error ? err.message : "Failed to start call");
+            setIsCallActive(false);
         }
     };
 
@@ -229,19 +260,7 @@ export default function Hero() {
                             <input
                                 type="email"
                                 value={email}
-                                onChange={(e) => {
-                                    const newEmail = e.target.value;
-                                    console.log('�� Cambio en el email:', newEmail);
-                                    setEmail(newEmail);
-                                    const isValid = validateEmail(newEmail);
-                                    console.log('✅ Email válido:', isValid);
-                                    setIsEmailValid(isValid);
-                                    if (isValid) {
-                                        // Guardar email válido en localStorage
-                                        localStorage.setItem('userEmail', newEmail);
-                                        console.log('💾 Email guardado en localStorage');
-                                    }
-                                }}
+                                onChange={handleEmailChange}
                                 placeholder="Enter your email to start"
                                 className={`w-full px-4 py-3 rounded-lg bg-white/10 text-white border ${
                                     email && !isEmailValid ? 'border-red-500' : 'border-white/20'
@@ -251,7 +270,7 @@ export default function Hero() {
                                 <p className="text-red-500 text-sm mt-1">Please enter a valid email address</p>
                             )}
                             <p className="text-white/60 text-sm mt-2">
-                                Enter your real email to receive a personalized AI automation proposal
+                                Enter your real email to receive a personalized AI automation proposal, you only have 1 call of 1 minute available.
                             </p>
                         </motion.div>
 
@@ -266,51 +285,50 @@ export default function Hero() {
                                 {!isCallActive && agent.callStatus !== "FINISHED" ? (
                                     <button
                                         onClick={handleCallStart}
-                                        disabled={!isEmailValid || !hasCallAvailable || isLoading}
+                                        disabled={!isEmailValid || !hasCallAvailable}
                                         className={`flex items-center gap-2 px-6 py-3 rounded-full ${
-                                            isEmailValid && hasCallAvailable && !isLoading
+                                            isEmailValid && hasCallAvailable
                                                 ? 'bg-primary hover:bg-primary/80'
                                                 : 'bg-gray-500 cursor-not-allowed'
                                         } text-white font-medium transition-colors`}
                                     >
                                         <FaMicrophone className="text-lg" />
-                                        {isLoading 
-                                            ? 'Starting...'
-                                            : !isEmailValid 
-                                                ? 'Enter valid email'
-                                                : !hasCallAvailable 
-                                                    ? 'No Calls Available' 
-                                                    : 'Start Call'}
-                                    </button>
-                                ) : isCallActive ? (
-                                    <button
-                                        onClick={handleHangupClick}
-                                        disabled={isLoading}
-                                        className="flex items-center gap-2 px-6 py-3 rounded-full bg-red-600 hover:bg-red-700 text-white font-medium transition-colors"
-                                    >
-                                        <FaPhoneSlash className="text-lg" />
-                                        End Call
+                                        {!isEmailValid 
+                                            ? 'Enter valid email'
+                                            : !hasCallAvailable 
+                                                ? 'No Calls Available' 
+                                                : 'Start Call'}
                                     </button>
                                 ) : null}
+                                
+                               
                             </div>
 
                             {/* Remaining calls info */}
                             <div className="text-white/60 text-sm flex items-center gap-2">
-                                <span>{hasCallAvailable ? "You have 1 call available" : "No calls available"}</span>
-                                <span className="text-xs">•</span>
-                                <span>Each call is limited to 1 minute</span>
+                                
                                 {/* Reset button - solo en desarrollo */}
                                 {process.env.NODE_ENV === 'development' && (
                                     <button
-                                        onClick={resetCall}
-                                        disabled={isLoading}
-                                        className={`ml-4 px-2 py-1 text-xs ${
-                                            isLoading 
-                                                ? 'bg-gray-500 cursor-not-allowed'
-                                                : 'bg-yellow-500 hover:bg-yellow-600'
-                                        } text-black rounded transition-colors`}
+                                        onClick={async () => {
+                                            try {
+                                                const response = await fetch('/api/reset-calls', {
+                                                    method: 'POST'
+                                                });
+                                                const data = await response.json();
+                                                if (data.success) {
+                                                    await checkCallAvailability();
+                                                    setError(null);
+                                                }
+                                            } catch (err) {
+                                                console.error('Error resetting call:', err);
+                                                setError('Failed to reset call');
+                                            }
+                                        }}
+                                        className="ml-4 px-2 py-1 text-xs bg-yellow-500 hover:bg-yellow-600 
+                                        text-black rounded transition-colors"
                                     >
-                                        {isLoading ? 'Resetting...' : 'Reset Call (Dev)'}
+                                        Reset Call (Dev)
                                     </button>
                                 )}
                             </div>
@@ -375,7 +393,7 @@ export default function Hero() {
                                             className="mx-auto bg-black/80 backdrop-blur-sm px-6 py-3 rounded-full
                                             text-white text-lg font-medium border border-white/20"
                                         >
-                                            1:00
+                                            {formatTime(timeRemaining)}
                                         </motion.div>
                                         
                                         {/* Botón de colgar */}

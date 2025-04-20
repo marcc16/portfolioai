@@ -1,76 +1,57 @@
-import { Redis } from '@upstash/redis';
+import { Redis } from '@upstash/redis'
+import { NextRequest } from 'next/server'
 
-// Validar que las credenciales de Upstash estén presentes
-if (process.env.ENABLE_RATE_LIMITING === 'true') {
-  if (!process.env.UPSTASH_REDIS_REST_URL || !process.env.UPSTASH_REDIS_REST_TOKEN) {
-    throw new Error('Missing Upstash Redis credentials in environment variables');
-  }
-}
-
-// Configuración de Upstash Redis
+// Initialize Redis client
 export const redis = new Redis({
   url: process.env.UPSTASH_REDIS_REST_URL!,
   token: process.env.UPSTASH_REDIS_REST_TOKEN!,
-});
+})
 
-// Constantes para el rate limiting
-export const CALL_DURATION = 60; // 1 minuto en segundos
-export const RATE_LIMITING_ENABLED = process.env.ENABLE_RATE_LIMITING === 'true';
-
-// Función para verificar si el usuario ya ha usado su intento
-export async function hasUsedCall(userId: string): Promise<boolean> {
-  if (!RATE_LIMITING_ENABLED) return false;
+// Get unique user identifier from request
+export function getUserId(request: NextRequest): string {
+  // Get user IP
+  const forwardedFor = request.headers.get('x-forwarded-for')
+  const realIp = request.headers.get('x-real-ip')
+  const ip = forwardedFor?.split(',')[0] || realIp || '127.0.0.1'
   
-  try {
-    const hasUsed = await redis.get<boolean>(`call:${userId}`);
-    return hasUsed === true;
-  } catch (error) {
-    console.error('Error checking call usage:', error);
-    return true; // Por seguridad, asumimos que ya usó su intento si hay error
-  }
+  // Get user agent
+  const userAgent = request.headers.get('user-agent') || ''
+  
+  // Combine IP and user agent for a more unique identifier
+  return `${ip}:${userAgent}`
 }
 
-// Función para registrar el uso del intento
-export async function registerCallUsage(userId: string): Promise<boolean> {
-  if (!RATE_LIMITING_ENABLED) return true;
-  
-  try {
-    const hasUsed = await hasUsedCall(userId);
-    if (hasUsed) {
-      return false;
-    }
-    
-    // Marcar como usado con TTL de 24 horas
-    await redis.set(`call:${userId}`, true, { ex: 24 * 60 * 60 });
-    return true;
-  } catch (error) {
-    console.error('Error registering call usage:', error);
-    return false;
+// Maximum allowed calls per user
+const MAX_CALLS = 1
+
+// Get remaining calls for a user
+export async function getRemainingCalls(userId: string): Promise<number> {
+  // Check if rate limiting is enabled
+  if (process.env.ENABLE_RATE_LIMITING !== 'true') {
+    return MAX_CALLS
   }
+
+  const key = `calls:${userId}`
+  const usedCalls = await redis.get<number>(key) || 0
+  return Math.max(0, MAX_CALLS - usedCalls)
 }
 
-// Función para resetear el uso (solo en desarrollo)
-export async function resetCallUsage(userId: string): Promise<boolean> {
-  if (process.env.NODE_ENV !== 'development') {
-    return false;
+// Register a new call for a user
+export async function registerCall(userId: string): Promise<boolean> {
+  // Check if rate limiting is enabled
+  if (process.env.ENABLE_RATE_LIMITING !== 'true') {
+    return true
   }
 
-  try {
-    await redis.del(`call:${userId}`);
-    return true;
-  } catch (error) {
-    console.error('Error resetting call usage:', error);
-    return false;
-  }
-}
-
-// Función para obtener un identificador único del usuario
-export function getUserId(req: Request): string {
-  const headers = new Headers(req.headers);
-  const forwarded = headers.get('x-forwarded-for');
-  const realIp = headers.get('x-real-ip');
-  const userAgent = headers.get('user-agent') || '';
+  const key = `calls:${userId}`
+  const usedCalls = await redis.get<number>(key) || 0
   
-  const ip = forwarded?.split(',')[0] || realIp || headers.get('x-client-ip') || '127.0.0.1';
-  return `${ip}:${userAgent}`;
+  // Check if user has remaining calls
+  if (usedCalls >= MAX_CALLS) {
+    return false
+  }
+  
+  // Register the call permanently (no expiration)
+  await redis.set(key, usedCalls + 1)
+  return true
 } 

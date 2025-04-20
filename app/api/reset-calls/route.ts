@@ -1,33 +1,30 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getUserId, resetCallUsage } from '@/lib/upstash';
+import { redis, getUserId } from '@/lib/upstash';
 
 export async function POST(request: NextRequest) {
     // Solo permitir en desarrollo
     if (process.env.NODE_ENV !== 'development') {
-        return NextResponse.json({ error: 'This endpoint is only available in development mode' }, { status: 403 });
+        return NextResponse.json(
+            { success: false, message: 'Reset only available in development mode' },
+            { status: 403 }
+        );
     }
 
     try {
         const userId = getUserId(request);
-        const success = await resetCallUsage(userId);
-
-        if (!success) {
-            return NextResponse.json(
-                { success: false, message: 'Failed to reset call' },
-                { status: 500 }
-            );
-        }
-
+        const key = `calls:${userId}`;
+        
+        // Eliminar el registro de llamadas del usuario
+        await redis.del(key);
+        
         return NextResponse.json({
             success: true,
-            message: 'Call reset successfully',
-            userId,
-            timestamp: new Date().toISOString()
+            message: 'Calls reset successfully'
         });
     } catch (error) {
-        console.error('Error resetting call:', error);
+        console.error('Error resetting calls:', error);
         return NextResponse.json(
-            { success: false, message: 'Failed to reset call' },
+            { success: false, message: 'Failed to reset calls' },
             { status: 500 }
         );
     }
