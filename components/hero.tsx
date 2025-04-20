@@ -46,6 +46,16 @@ export default function Hero() {
         }
     }, [agent]);
 
+    // Monitorear el estado de la llamada de VAPI
+    useEffect(() => {
+        if (agent.callStatus === "FINISHED" && isCallActive) {
+            console.log('📞 VAPI finalizó la llamada, actualizando UI...');
+            setIsCallActive(false);
+            setTimerStarted(false);
+            setTimeRemaining(60);
+        }
+    }, [agent.callStatus, isCallActive]);
+
     // Manejar la cuenta atrás
     useEffect(() => {
         let timer: NodeJS.Timeout;

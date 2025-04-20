@@ -112,8 +112,11 @@ export async function registerCall(userId: string): Promise<boolean> {
       return true
     }
 
-    // Admin users don't consume calls
-    if (userId === 'admin-unlimited') {
+    // Para probar rate limiting, podemos usar esta variable de entorno
+    const testRateLimiting = process.env.TEST_RATE_LIMITING === 'true';
+    
+    // Admin users don't consume calls unless we're testing rate limiting
+    if (userId === 'admin-unlimited' && !testRateLimiting) {
       console.log('✨ Admin user detected, skipping call registration');
       return true;
     }
