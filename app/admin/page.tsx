@@ -63,6 +63,7 @@ export default function AdminPage() {
         return;
       }
       
+      console.log('📤 Enviando solicitud para añadir IP:', newIP);
       const response = await fetch('/api/exempt-ips', {
         method: 'POST',
         headers: {
@@ -72,22 +73,24 @@ export default function AdminPage() {
         body: JSON.stringify({ ip: newIP })
       });
       
+      const data = await response.json();
+      console.log('📥 Respuesta recibida:', data);
+      
       if (!response.ok) {
-        throw new Error('Failed to add exempt IP');
+        throw new Error(data.error || data.details || 'Failed to add exempt IP');
       }
       
-      const data = await response.json();
       setExemptIPs(data.exemptIPs);
       setSuccess(`Added ${newIP} to exempt IPs`);
       setNewIP('');
       
-      // Forzar refresco después de 1 segundo
-      setTimeout(() => {
-        router.refresh();
+      // Recargar la lista después de 1 segundo
+      setTimeout(async () => {
+        await fetchExemptIPs();
       }, 1000);
     } catch (err) {
-      console.error('Error adding exempt IP:', err);
-      setError('Failed to add IP. Check your permissions.');
+      console.error('❌ Error adding exempt IP:', err);
+      setError(err instanceof Error ? err.message : 'Failed to add IP. Check your permissions.');
     }
   };
 
