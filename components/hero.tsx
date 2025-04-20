@@ -186,14 +186,6 @@ export default function Hero() {
             setIsCallActive(true);
             setError(null);
             await agent.handleCall();
-
-            // Si hay error al iniciar la llamada, revertimos el estado
-            if (agent.callStatus !== "ACTIVE") {
-                setError("Failed to start call with AI assistant");
-                setIsCallActive(false);
-                return;
-            }
-
             console.log('✅ Llamada iniciada correctamente');
         } catch (err) {
             console.error('❌ Error iniciando la llamada:', err);
@@ -311,39 +303,8 @@ export default function Hero() {
 
                             {/* Remaining calls info */}
                             <div className="text-white/60 text-sm flex items-center gap-2">
-                                
-                                {/* Reset button - solo para admins confirmados por el servidor */}
-                                {isAdmin && (
-                                    <button
-                                        onClick={async () => {
-                                            try {
-                                                const response = await fetch('/api/reset-calls', {
-                                                    method: 'POST',
-                                                    headers: {
-                                                        'Content-Type': 'application/json'
-                                                    },
-                                                    body: JSON.stringify({}) // No necesitamos targetUserId, usará el del admin
-                                                });
-                                                const data = await response.json();
-                                                
-                                                if (!data.success) {
-                                                    console.error('❌ Error resetting calls:', data.error);
-                                                    setError('Failed to reset calls: ' + (data.message || 'Unknown error'));
-                                                    return;
-                                                }
-                                                
-                                                await checkCallAvailability();
-                                                setError(null);
-                                            } catch (err) {
-                                                console.error('❌ Error resetting call:', err);
-                                                setError('Failed to reset call');
-                                            }
-                                        }}
-                                        className="ml-4 px-2 py-1 text-xs bg-yellow-500 hover:bg-yellow-600 
-                                        text-black rounded transition-colors"
-                                    >
-                                        Reset Call
-                                    </button>
+                                {!hasCallAvailable && !isAdmin && (
+                                    <span>You have used your available call. Thank you for trying the demo!</span>
                                 )}
                             </div>
                         </motion.div>
@@ -392,7 +353,7 @@ export default function Hero() {
 
                             {/* Overlay para elementos de la llamada */}
                             <AnimatePresence>
-                                {isCallActive && agent.callStatus === "ACTIVE" && (
+                                {isCallActive && (
                                     <motion.div
                                         initial={{ opacity: 0 }}
                                         animate={{ opacity: 1 }}
@@ -429,7 +390,7 @@ export default function Hero() {
 
                             {/* Ondas de voz animadas */}
                             <AnimatePresence>
-                                {isCallActive && agent.callStatus === "ACTIVE" && (
+                                {isCallActive && (
                                     <motion.div
                                         initial={{ scale: 0.8, opacity: 0 }}
                                         animate={{ scale: 1, opacity: 1 }}
