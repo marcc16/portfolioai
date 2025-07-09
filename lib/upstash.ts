@@ -79,7 +79,7 @@ export function getUserId(request: NextRequest): string {
 }
 
 // Maximum allowed calls per user
-const MAX_CALLS = 1
+const MAX_CALLS = 10;
 
 // Get remaining calls for a user
 export async function getRemainingCalls(userId: string): Promise<number> {
