@@ -84,16 +84,17 @@ const MAX_CALLS = 1
 // Get remaining calls for a user
 export async function getRemainingCalls(userId: string): Promise<number> {
   try {
-    // Always check rate limiting in production
-    if (process.env.NODE_ENV !== 'production' && process.env.ENABLE_RATE_LIMITING !== 'true') {
+    // Si el rate limiting está desactivado, siempre permitir llamadas
+    const enableRateLimiting = process.env.ENABLE_RATE_LIMITING === 'true';
+    const testRateLimiting = process.env.TEST_RATE_LIMITING === 'true';
+    if (!enableRateLimiting && !testRateLimiting) {
       return MAX_CALLS;
     }
 
     // Para probar rate limiting, podemos usar esta variable de entorno
-    const testRateLimiting = process.env.TEST_RATE_LIMITING === 'true';
     console.log('🔧 Test rate limiting:', testRateLimiting);
     
-    // Admin users always have calls available unless we're testing rate limiting
+    // Admin users always have calls available unless estamos testeando
     if (userId === 'admin-unlimited' && !testRateLimiting) {
       return MAX_CALLS;
     }
@@ -112,16 +113,17 @@ export async function getRemainingCalls(userId: string): Promise<number> {
 // Register a new call for a user
 export async function registerCall(userId: string): Promise<boolean> {
   try {
-    // Always check rate limiting in production
-    if (process.env.NODE_ENV !== 'production' && process.env.ENABLE_RATE_LIMITING !== 'true') {
+    // Si el rate limiting está desactivado, siempre permitir llamadas
+    const enableRateLimiting = process.env.ENABLE_RATE_LIMITING === 'true';
+    const testRateLimiting = process.env.TEST_RATE_LIMITING === 'true';
+    if (!enableRateLimiting && !testRateLimiting) {
       return true;
     }
 
     // Para probar rate limiting, podemos usar esta variable de entorno
-    const testRateLimiting = process.env.TEST_RATE_LIMITING === 'true';
     console.log('🔧 Test rate limiting:', testRateLimiting);
     
-    // Admin users don't consume calls unless we're testing rate limiting
+    // Admin users don't consume calls unless estamos testeando
     if (userId === 'admin-unlimited' && !testRateLimiting) {
       console.log('✨ Admin user detected, skipping call registration');
       return true;
