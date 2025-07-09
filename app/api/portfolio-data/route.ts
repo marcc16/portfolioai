@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 
-const N8N_WEBHOOK_URL = 'AQUÍ_PON_LA_NUEVA_URL_DEL_WEBHOOK';
+const N8N_WEBHOOK_URL = 'https://n8n-n4kv.onrender.com/webhook-test/portfolio';
 
 export async function POST(request: Request) {
   console.log('🔵 [API] POST /api/portfolio-data - Recibida nueva solicitud');
