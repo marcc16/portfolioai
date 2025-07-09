@@ -11,12 +11,14 @@ export async function POST(request: Request) {
     
     // Extraer email y respuestas
     const { email, responses } = data;
+    // Asegurar que responses es un array
+    const safeResponses = Array.isArray(responses) ? responses : ["", ""];
     
     // Formatear los datos para n8n
     const automationData = {
       email,
-      agentType: responses[0] || "",  // Primera respuesta después del "Sí, dime"
-      integrations: responses[1] || "", // Segunda respuesta
+      agentType: safeResponses[0] || "",  // Primera respuesta después del "Sí, dime"
+      integrations: safeResponses[1] || "", // Segunda respuesta
       timestamp: new Date().toISOString(),
       source: "portfolio_voice_demo"
     };
