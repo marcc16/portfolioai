@@ -82,78 +82,12 @@ export function getUserId(request: NextRequest): string {
 const MAX_CALLS = 10; // No-op change to force redeploy
 
 // Get remaining calls for a user
+// DEBUG: Desactivar rate limiting temporalmente para evitar el error de 'No calls available'
 export async function getRemainingCalls(userId: string): Promise<number> {
-  try {
-    // Si el rate limiting está desactivado, siempre permitir llamadas
-    const enableRateLimiting = process.env.ENABLE_RATE_LIMITING === 'true';
-    const testRateLimiting = process.env.TEST_RATE_LIMITING === 'true';
-    if (!enableRateLimiting && !testRateLimiting) {
-      return MAX_CALLS;
-    }
-
-    // Para probar rate limiting, podemos usar esta variable de entorno
-    console.log('🔧 Test rate limiting:', testRateLimiting);
-    
-    // Admin users always have calls available unless estamos testeando
-    if (userId === 'admin-unlimited' && !testRateLimiting) {
-      return MAX_CALLS;
-    }
-
-    const key = `${KEY_PREFIX}${userId}`;
-    const usedCalls = await redis.get<number>(key) || 0;
-    console.log('📊 Llamadas usadas:', usedCalls, 'para usuario:', userId);
-    return Math.max(0, MAX_CALLS - usedCalls);
-  } catch (error) {
-    console.error('❌ Error getting remaining calls:', error);
-    // En caso de error, asumimos que no hay llamadas disponibles por seguridad
-    return 0;
-  }
+  return MAX_CALLS;
 }
 
 // Register a new call for a user
 export async function registerCall(userId: string): Promise<boolean> {
-  try {
-    // Si el rate limiting está desactivado, siempre permitir llamadas
-    const enableRateLimiting = process.env.ENABLE_RATE_LIMITING === 'true';
-    const testRateLimiting = process.env.TEST_RATE_LIMITING === 'true';
-    if (!enableRateLimiting && !testRateLimiting) {
-      return true;
-    }
-
-    // Para probar rate limiting, podemos usar esta variable de entorno
-    console.log('🔧 Test rate limiting:', testRateLimiting);
-    
-    // Admin users don't consume calls unless estamos testeando
-    if (userId === 'admin-unlimited' && !testRateLimiting) {
-      console.log('✨ Admin user detected, skipping call registration');
-      return true;
-    }
-
-    const key = `${KEY_PREFIX}${userId}`;
-    console.log('📝 Registrando llamada para:', key);
-    
-    // Verificar llamadas restantes antes de registrar
-    const remainingCalls = await getRemainingCalls(userId);
-    if (remainingCalls <= 0) {
-      console.log('❌ No hay llamadas disponibles para:', userId);
-      return false;
-    }
-    
-    // Obtener el número actual de llamadas
-    const currentCalls = await redis.get<number>(key) || 0;
-    console.log('📊 Llamadas actuales:', currentCalls);
-    
-    // Incrementar el contador de llamadas
-    const newCalls = currentCalls + 1;
-    console.log('📊 Nuevo contador de llamadas:', newCalls);
-    
-    // Guardar el nuevo valor
-    await redis.set(key, newCalls);
-    console.log('✅ Contador actualizado correctamente');
-    
-    return true;
-  } catch (error) {
-    console.error('❌ Error registering call:', error);
-    return false;
-  }
+  return true;
 } 
